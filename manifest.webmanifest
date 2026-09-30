@@ -1,0 +1,17 @@
+{
+  "name": "Pokémon-Sammlung",
+  "short_name": "Sammlung",
+  "description": "Meine Pokémon-Karten: Sammlung, Sets, Einkaufsliste, Verkäufe und Karten scannen.",
+  "start_url": "./#sammlung",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f6",
+  "theme_color": "#2a4fa3",
+  "lang": "de",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

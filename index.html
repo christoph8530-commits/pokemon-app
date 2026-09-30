@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pokémon-Sammlung</title>
+<meta name="theme-color" content="#2a4fa3">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Sammelordner-App fürs Handy – Bilanz oben, Suchleiste mit Tabs klebt, Karten als Raster, Plus-Knopf unten rechts. */
+:root {
+  --bg: #eef1f6; --surface: #ffffff; --ink: #1b2233; --muted: #5b6478; --line: #d9dee8;
+  --accent: #2a4fa3; --accent-ink: #ffffff; --frame: #f2c230; --frame-ink: #3b2c00; --warn: #b45309;
+  --guenstig: #2f8f5b; --mittel: #c98a0b; --teuer: #c2412d;
+  --display: "Alegreya Sans", "Gill Sans", "Gill Sans MT", Calibri, sans-serif;
+  --body: "Alegreya Sans", "Gill Sans", "Gill Sans MT", Calibri, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141d; --surface: #1a2030; --ink: #e8ecf4; --muted: #9aa3b5; --line: #2c3447;
+    --accent: #8aa6ee; --accent-ink: #0f1422; --frame: #e9b92a; --frame-ink: #231a00; --warn: #f0a44b;
+    --guenstig: #5cc38a; --mittel: #e8b84a; --teuer: #f07a66; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141d; --surface: #1a2030; --ink: #e8ecf4; --muted: #9aa3b5; --line: #2c3447;
+  --accent: #8aa6ee; --accent-ink: #0f1422; --frame: #e9b92a; --frame-ink: #231a00; --warn: #f0a44b;
+  --guenstig: #5cc38a; --mittel: #e8b84a; --teuer: #f07a66; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.45; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 22px 110px; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); font-weight: 800; line-height: 1.05; }
+h2 { font-size: 1.25rem; font-weight: 800; }
+p { margin: 0; max-width: 66ch; }
+.eyebrow { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 700; }
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; }
+header { display: grid; gap: 6px; }
+.status { font-size: 0.9rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.status .punkt { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.ok .punkt { background: var(--guenstig); }
+.status.warn .punkt { background: var(--warn); }
+
+.bilanz { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.bilanz > div { background: var(--surface); padding: 12px 14px; display: grid; gap: 1px; }
+.bilanz .wert { font-family: var(--mono); font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.bilanz .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+.bilanz small { color: var(--muted); font-size: 0.8rem; }
+@media (max-width: 700px) { .bilanz { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.leiste { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; margin-block: -8px; display: grid; gap: 6px; }
+.leiste input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; width: 100%; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs button { font-weight: 700; color: var(--muted); background: transparent; border: 0; border-bottom: 3px solid transparent; padding: 7px 12px 8px; margin-bottom: -1px; cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--frame); }
+.panel { display: grid; gap: 16px; scroll-margin-top: 110px; min-width: 0; }
+
+.werkzeug { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.werkzeug select, .formular select, .formular input, .formular textarea { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.95rem; }
+.treffer { margin-left: auto; font-size: 0.88rem; color: var(--muted); }
+.chip-knopf { font-weight: 700; font-size: 0.88rem; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 4px 11px; cursor: pointer; }
+.chip-knopf[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.punkt-f { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+.f-guenstig { background: var(--guenstig); } .f-mittel { background: var(--mittel); } .f-teuer { background: var(--teuer); }
+
+.raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.karte { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; text-align: left; color: inherit; padding: 0; cursor: pointer; position: relative; }
+.karte .bild { display: block; padding: 8px 8px 0; }
+.karte img, .karte .leerbild { display: block; width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 6px; background: var(--line); }
+.karte .info { padding: 8px 10px 10px; display: grid; gap: 3px; align-content: start; }
+.karte .k-titel { font-family: var(--display); font-size: 1rem; font-weight: 800; line-height: 1.15; }
+.karte .meta { font-size: 0.82rem; color: var(--muted); }
+.karte .preis { font-family: var(--mono); font-size: 0.92rem; }
+.stueck { position: absolute; top: 12px; right: 12px; font-family: var(--mono); font-size: 0.85rem; padding: 1px 8px; border-radius: 99px; background: var(--frame); color: var(--frame-ink); }
+.marke { position: absolute; top: 12px; left: 12px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.marke.neu { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.karte.fehlt { background: transparent; border-style: dashed; }
+.karte.fehlt img { opacity: 0.55; filter: grayscale(1); }
+.karte.fehlt .k-titel { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.chip.gelb { border-color: var(--frame); color: var(--ink); background: color-mix(in srgb, var(--frame) 25%, transparent); }
+
+.liste { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.liste li { display: grid; grid-template-columns: 4px 40px minmax(0, 1fr) auto; gap: 0 10px; align-items: center; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); }
+.liste li:last-child { border-bottom: 0; }
+.liste .streifen { align-self: stretch; }
+.liste img, .liste .leerbild { display: block; width: 40px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 3px; background: var(--line); }
+.liste .name { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.liste .unter { display: block; font-weight: 400; font-size: 0.83rem; color: var(--muted); }
+.liste .rechts { text-align: right; white-space: nowrap; display: grid; gap: 3px; justify-items: end; font-family: var(--mono); font-size: 0.92rem; }
+.knopf { font-weight: 700; font-size: 0.85rem; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 99px; padding: 3px 11px; cursor: pointer; font-family: var(--body); }
+.knopf.voll { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.knopf.gefahr { color: var(--teuer); }
+
+.setliste { display: grid; gap: 8px; }
+.setkarte { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; text-align: left; color: inherit; cursor: pointer; width: 100%; }
+.setkarte .voll { grid-column: 1 / 3; display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--muted); }
+.balken { flex: 1; height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.balken span { display: block; height: 100%; background: var(--accent); }
+.leer { padding: 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
+.stufen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stufen > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.stufen .wert { font-family: var(--mono); font-size: 1.25rem; }
+@media (max-width: 700px) { .stufen { grid-template-columns: minmax(0, 1fr); } }
+
+.fabs { position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 10; display: flex; gap: 10px; }
+.fab { font-weight: 800; font-size: 1.05rem; color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 99px; padding: 14px 20px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.25); cursor: pointer; }
+.fab.zweit { color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
+.besitz { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 0.98rem; }
+.besitz.fehlt { border-color: var(--guenstig); background: color-mix(in srgb, var(--guenstig) 14%, var(--surface)); }
+.besitz .zeile { display: flex; gap: 12px; align-items: center; }
+.besitz .zeile img { width: 56px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 4px; flex: none; }
+.besitz .gross-text { font-size: 1.15rem; }
+.besitz.hat { border-color: var(--frame); background: color-mix(in srgb, var(--frame) 16%, var(--surface)); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 99px; font-weight: 700; max-width: calc(100vw - 32px); }
+
+dialog { border: 0; padding: 0; background: var(--surface); color: var(--ink); border-radius: 16px; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+dialog::backdrop { background: rgb(8 10 16 / 0.7); }
+.dlg { display: grid; gap: 14px; padding: 18px; }
+.dlg-kopf { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.zu { font-weight: 700; background: transparent; border: 1px solid var(--line); border-radius: 99px; padding: 3px 12px; cursor: pointer; color: var(--ink); }
+.formular { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.formular label { display: grid; gap: 4px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); min-width: 0; }
+.formular label > * { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 1rem; }
+.formular .breit { grid-column: 1 / 3; }
+.fotofeld { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; align-items: center; }
+.fotofeld img, .fotofeld .leerbild { width: 90px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 6px; background: var(--line); display: block; }
+.fotofeld .aktionen { display: grid; gap: 8px; justify-items: start; }
+.meldung { font-size: 0.92rem; color: var(--muted); }
+.meldung.fehler { color: var(--teuer); }
+.dlg-fuss { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.gross img { width: 100%; max-height: 55dvh; object-fit: contain; border-radius: 10px; background: var(--bg); display: block; }
+@media (prefers-reduced-motion: no-preference) { .karte { transition: transform .12s ease; } .karte:active { transform: scale(0.98); } }
+.kopfzeile { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.kandidaten { display: grid; gap: 8px; }
+.kandidaten .reihe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kandidat { display: grid; gap: 4px; padding: 6px; background: var(--bg); border: 2px solid var(--line); border-radius: 10px; cursor: pointer; text-align: left; color: inherit; font-size: 0.8rem; }
+.kandidat[aria-pressed="true"] { border-color: var(--accent); }
+.kandidat img, .kandidat .leerbild { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 5px; background: var(--line); display: block; }
+.stempel { display: flex; gap: 12px; align-items: center; font-size: 0.92rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.stempel img { width: 110px; border-radius: 6px; flex: none; }
+.erkannt { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 0.95rem; }
+.einstellungen { display: grid; gap: 12px; }
+.einstellungen label { display: grid; gap: 4px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.einstellungen input { font: inherit; font-size: 1rem; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.einstellungen .hinweis { font-size: 0.86rem; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.pruefliste { display: grid; gap: 4px; font-size: 0.92rem; }
+.willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kopfzeile"><div class="eyebrow">Sammlung · Karten von 1999 bis 2001</div><button type="button" class="zu" id="einstellungen-knopf" aria-label="Einstellungen">⚙ Einstellungen</button></div>
+    <h1>Pokémon-Sammlung</h1>
+    <div class="status" id="status"><span class="punkt"></span><span id="status-text">Lädt die Sammlung …</span></div>
+  </header>
+
+  <div class="bilanz" id="bilanz"></div>
+
+  <div class="leiste">
+    <input id="suche" type="search" aria-label="Karte suchen" placeholder="Suchen: Name, Set oder Nummer, z. B. Glumanda, Fossil, 35/102">
+    <nav class="tabs" role="tablist" aria-label="Ansicht">
+      <button type="button" role="tab" data-tab="sammlung" id="tab-sammlung">Sammlung</button>
+      <button type="button" role="tab" data-tab="sets" id="tab-sets">Sets</button>
+      <button type="button" role="tab" data-tab="einkaufen" id="tab-einkaufen">Einkaufen</button>
+      <button type="button" role="tab" data-tab="verkaufen" id="tab-verkaufen">Verkaufen</button>
+      <button type="button" role="tab" data-tab="verlauf" id="tab-verlauf">Verlauf</button>
+    </nav>
+  </div>
+
+  <div class="panel" id="panel-sammlung" role="tabpanel" aria-labelledby="tab-sammlung">
+    <div class="werkzeug">
+      <select id="s-set" aria-label="Set"><option value="">Alle Sets</option></select>
+      <select id="s-sprache" aria-label="Sprache"><option value="">Alle Sprachen</option><option value="DE">Deutsch</option><option value="EN">Englisch</option><option value="JP">Japanisch</option></select>
+      <select id="s-sort" aria-label="Sortierung"><option value="wert">Wert</option><option value="set">Set und Nummer</option><option value="name">Name</option><option value="neu">Zuletzt hinzugefügt</option></select>
+      <label class="check"><input id="s-doppelt" type="checkbox"> Doppelte</label>
+      <label class="check"><input id="s-fehlend" type="checkbox"> Fehlende zeigen</label>
+      <span class="treffer" id="s-treffer"></span>
+    </div>
+    <div class="raster" id="s-raster"></div>
+  </div>
+
+  <div class="panel" id="panel-sets" role="tabpanel" aria-labelledby="tab-sets" hidden>
+    <p class="muted">Der Balken zeigt, wie viele verschiedene Karten eines Sets du hast. Tippe auf ein Set, um es als Checkliste zu sehen.</p>
+    <div class="setliste" id="sets"></div>
+    <h2>Besondere Karten</h2>
+    <div class="raster" id="sonstige"></div>
+  </div>
+
+  <div class="panel" id="panel-einkaufen" role="tabpanel" aria-labelledby="tab-einkaufen" hidden>
+    <div class="werkzeug">
+      <select id="e-set" aria-label="Set"><option value="">Alle Sets</option></select>
+      <button type="button" class="chip-knopf" data-stufe="guenstig" aria-pressed="true"><span class="punkt-f f-guenstig"></span>bis 2 €</button>
+      <button type="button" class="chip-knopf" data-stufe="mittel" aria-pressed="true"><span class="punkt-f f-mittel"></span>2–10 €</button>
+      <button type="button" class="chip-knopf" data-stufe="teuer" aria-pressed="true"><span class="punkt-f f-teuer"></span>über 10 €</button>
+      <select id="e-sort" aria-label="Sortierung"><option value="nr">Nach Nummer</option><option value="preis">Günstigste zuerst</option><option value="preis-ab">Teuerste zuerst</option></select>
+      <span class="treffer" id="e-treffer"></span>
+    </div>
+    <div id="e-listen" style="display:grid;gap:18px"></div>
+  </div>
+
+  <div class="panel" id="panel-verkaufen" role="tabpanel" aria-labelledby="tab-verkaufen" hidden>
+    <div class="stufen" id="v-stufen"></div>
+    <h2>Lohnt sich einzeln</h2>
+    <p class="muted">Ab ca. 3 € Marktwert. Der Angebotspreis ist vorsichtig angesetzt. Tippe auf eine Karte, um einen Verkauf zu erfassen.</p>
+    <ol class="liste" id="v-einzeln"></ol>
+  </div>
+
+  <div class="panel" id="panel-verlauf" role="tabpanel" aria-labelledby="tab-verlauf" hidden>
+    <div class="stufen" id="h-summen"></div>
+    <ol class="liste" id="h-liste"></ol>
+  </div>
+</div>
+
+<div class="fabs"><button type="button" class="fab zweit" id="fab-pruefen" hidden>Prüfen</button><button type="button" class="fab" id="fab" hidden>＋ Karte</button></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<dialog id="dlg-neu" aria-labelledby="neu-titel">
+  <form class="dlg" id="form-neu" method="dialog">
+    <div class="dlg-kopf"><h2 id="neu-titel">Karte hinzufügen</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="fotofeld">
+      <div id="n-vorschau"><div class="leerbild"></div></div>
+      <div class="aktionen">
+        <label class="knopf voll" id="n-foto-knopf">Foto machen<input id="n-foto" type="file" accept="image/*" capture="environment" hidden></label>
+        <button type="button" class="knopf" id="n-erkennen" hidden>Karte erkennen</button>
+        <button type="button" class="knopf" id="n-nurbild" hidden>Ohne KI vergleichen</button>
+        <span class="meldung" id="n-meldung">Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.</span>
+      </div>
+    </div>
+    <div class="kandidaten" id="n-kandidaten" hidden></div>
+    <div class="besitz" id="n-besitz" hidden></div>
+    <div class="stempel" id="n-stempel" hidden></div>
+    <button type="button" class="knopf" id="n-korrigieren" hidden style="justify-self:start">Falsch erkannt? Korrigieren</button>
+    <div class="formular" id="n-formular">
+      <label>Set<select id="n-set"></select></label>
+      <label>Karte<select id="n-karte"></select></label>
+      <div class="breit erkannt" id="n-anders" hidden></div>
+      <label class="breit" id="n-frei" hidden>Name, Set und Nummer<input id="n-freitext" type="text" placeholder="z. B. Pikachu, Base Set 2, 87/130"></label>
+      <label>Sprache<select id="n-sprache"><option value="DE">Deutsch</option><option value="EN">Englisch</option><option value="JP">Japanisch</option><option value="andere">Andere</option></select></label>
+      <label>Auflage<select id="n-auflage"><option value="normal">Normal</option><option value="1. Auflage">1. Auflage</option></select></label>
+      <label class="nur-neu">Anzahl<input id="n-anzahl" type="number" min="1" max="99" value="1" inputmode="numeric"></label>
+      <label class="nur-neu">Herkunft<select id="n-herkunft"><option>Gekauft</option><option>Getauscht</option><option>Geschenkt</option><option>Gefunden</option></select></label>
+      <label class="nur-neu">Bezahlt (€, gesamt)<input id="n-preis" type="text" inputmode="decimal" placeholder="optional"></label>
+      <label class="nur-neu">Datum<input id="n-datum" type="date"></label>
+      <label class="breit nur-neu">Notiz<input id="n-notiz" type="text" placeholder="optional, z. B. Börse Wien, Zustand gut"></label>
+    </div>
+    <div class="dlg-fuss"><span class="meldung" id="n-speichern-meldung"></span><button type="button" class="knopf" id="n-naechste" hidden>Nächste Karte scannen</button><button type="button" class="knopf voll" id="n-wechsel" hidden>Zur Sammlung hinzufügen</button><button type="submit" class="knopf voll" id="n-speichern">Speichern</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-karte" aria-labelledby="k-titel">
+  <div class="dlg">
+    <div class="dlg-kopf"><h2 id="k-titel"></h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="gross" id="k-bild"></div>
+    <div id="k-info" style="display:grid;gap:6px"></div>
+    <div class="dlg-fuss" id="k-aktionen"></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-verkauf" aria-labelledby="vk-titel">
+  <form class="dlg" id="form-verkauf" method="dialog">
+    <div class="dlg-kopf"><h2 id="vk-titel">Verkauf erfassen</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <p id="vk-karte" class="muted"></p>
+    <div class="formular">
+      <label>Anzahl<input id="vk-anzahl" type="number" min="1" value="1" inputmode="numeric"></label>
+      <label>Erlös (€, gesamt)<input id="vk-preis" type="text" inputmode="decimal" placeholder="z. B. 12,50"></label>
+      <label>Datum<input id="vk-datum" type="date"></label>
+      <label>Wo<select id="vk-plattform"><option>Cardmarket</option><option>willhaben</option><option>Börse</option><option>Tausch</option><option>Sonstiges</option></select></label>
+      <label class="breit">Notiz<input id="vk-notiz" type="text" placeholder="optional"></label>
+    </div>
+    <div class="dlg-fuss"><span class="meldung" id="vk-meldung"></span><button type="submit" class="knopf voll" id="vk-speichern">Verkauf speichern</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-frage" aria-labelledby="f-titel">
+  <div class="dlg">
+    <h2 id="f-titel">Eintrag löschen?</h2>
+    <p id="f-text"></p>
+    <div class="dlg-fuss"><button type="button" class="knopf" data-zu>Abbrechen</button><button type="button" class="knopf voll" id="f-ja">Löschen</button></div>
+  </div>
+</dialog>
+<dialog id="dlg-einstellungen" aria-labelledby="e-titel">
+  <form class="dlg" id="form-einstellungen" method="dialog">
+    <div class="dlg-kopf"><h2 id="e-titel">Einstellungen</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <p class="muted">Die Schlüssel bleiben nur auf diesem Gerät gespeichert. Sie werden nur an GitHub bzw. Google geschickt.</p>
+    <div class="einstellungen">
+      <label>GitHub-Repo<input id="e-repo" type="text" autocomplete="off" spellcheck="false" placeholder="name/pokemon-sammlung">
+        <span class="hinweis">Das private Repo mit deiner Sammlung.</span></label>
+      <label>GitHub-Zugangsschlüssel<input id="e-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+        <span class="hinweis">Fein-granularer Token, nur für dieses eine Repo, Recht „Contents: Read and write“.</span></label>
+      <label>Gemini-Schlüssel<input id="e-gemini" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
+        <span class="hinweis">Aus Google AI Studio. Ohne Schlüssel funktioniert alles außer der automatischen Erkennung.</span></label>
+    </div>
+    <div class="pruefliste" id="e-ergebnis"></div>
+    <div class="dlg-fuss"><button type="button" class="knopf gefahr" id="e-vergessen">Schlüssel entfernen</button><button type="submit" class="knopf voll" id="e-speichern">Speichern und prüfen</button></div>
+  </form>
+</dialog>
+<script type="module" src="app.js"></script>
+</body>
+</html>
