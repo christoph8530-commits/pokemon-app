@@ -45,7 +45,7 @@ function inventar() {
       const sk = setInfo(z.set, z.nr);
       e = { key: z.key, id: sk?.id || z.id_karte || z.key, name: z.name || sk?.name || "Karte", set: z.set, nummer: z.nummer || sk?.nummer || "",
             nr: z.nr ?? 999, seltenheit: sk?.seltenheit || "", symbol: sk?.symbol || "", sprache: z.sprache, auflage: z.auflage,
-            preis: sk?.preis ?? z.preis ?? null, holo: !!sk?.holo, basis: 0, zugang: 0, verkauft: 0, neu: true, foto: null, zuletzt: "" };
+            preis: z.preis ?? sk?.preis ?? null, holo: !!sk?.holo, basis: 0, zugang: 0, verkauft: 0, neu: true, foto: null, zuletzt: "" };
       map.set(z.key, e);
     }
     e.zugang += Number(z.anzahl) || 0;
