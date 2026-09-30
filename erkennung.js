@@ -6,8 +6,9 @@ export const MODELL = "gemini-flash-lite-latest";   // Alias: rückt automatisch
 export const haken = { gemini: null };              // zum Testen: Gemini-Aufruf ersetzen
 const BILDER = "https://assets.tcgdex.net/";
 
-export const PROMPT = `Du siehst zwei Bilder: Bild 1 ist ein Foto einer Pokémon-Sammelkarte, Bild 2 ist ein vergrößerter Ausschnitt
-der Stelle links unter dem Kartenbild, wo bei Erstauflagen ein Stempel sitzt.
+export const PROMPT = `Du siehst drei Bilder: Bild 1 ist ein Foto einer Pokémon-Sammelkarte, Bild 2 ist ein vergrößerter Ausschnitt
+der Stelle links unter dem Kartenbild, wo bei Erstauflagen ein Stempel sitzt, Bild 3 ist die untere rechte Ecke
+mit Kartennummer (und bei manchen Karten dem Set-Symbol) vergrößert.
 Bestimme die Karte genau:
 - name: Kartenname wie aufgedruckt
 - name_en: englischer Name der Karte
@@ -15,8 +16,8 @@ Bestimme die Karte genau:
   "Team Rocket", "Gym Heroes", "Gym Challenge", "Neo Genesis"). Ein schwarzer Stern mit Nummer als Symbol bedeutet
   "Wizards Black Star Promos". Hat die Karte kein Set-Symbol, gib "Base Set" an.
 - nummer: die aufgedruckte Kartennummer unten rechts genau wie gedruckt, z. B. "35/102". Bei Promokarten steht nur eine
-  Zahl (oft im schwarzen Stern oder als "Nr. 5"), dann nur diese Zahl. Lies die Ziffern sorgfältig einzeln.
-- sprache: DE, EN, FR, IT, ES, NL, JP oder andere
+  Zahl (oft im schwarzen Stern oder als "Nr. 5"), dann nur diese Zahl. Lies die Ziffern sorgfältig einzeln, am besten in Bild 3.
+- sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, NL, JP oder andere (Energiekarten: „ENERGY“ = EN, „ENERGIE“ = DE)
 - erste_auflage: nur true, wenn in Bild 2 deutlich ein Stempel "Edition 1" bzw. "1st Edition" (schwarzer Kreis/Rahmen
   mit einer 1) zu erkennen ist. Ein Schatten, Holo-Glanz oder Text ist kein Stempel.
 - holo: true, wenn das Kartenbild glitzert (Holo)
@@ -48,6 +49,7 @@ function ohneDoppelte(liste) {
 
 const ART = [0.10, 0.11, 0.90, 0.47];      // Kartenbild einer Wizards-Karte (Anteile)
 const STEMPEL = [0.0, 0.40, 0.40, 0.62];   // Stelle des Erstauflage-Stempels
+const NUMMER = [0.45, 0.88, 1.0, 1.0];     // untere rechte Ecke mit der Kartennummer
 
 // ---------- Nachschlagewerk ----------
 export class Index {
@@ -143,6 +145,49 @@ function ausschnitt(bild, [x0, y0, x1, y1], breite, hoehe) {
   g.drawImage(bild, x0 * bild.width, y0 * bild.height, (x1 - x0) * bild.width, (y1 - y0) * bild.height, 0, 0, breite, hoehe);
   return c;
 }
+// Karte im Foto finden: gelber Rand, über Zeilen/Spalten mit gelben Pixeln (längster Bereich).
+// Ergebnis: Anteile [x0, y0, x1, y1] oder null, wenn kein Kartenrand gefunden wurde.
+export function findeKarte(bild) {
+  const w = 300, h = Math.max(1, Math.round(bild.height * w / bild.width));
+  const c = new OffscreenCanvas(w, h), g = c.getContext("2d");
+  g.drawImage(bild, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data, zeilen = new Float32Array(h), spalten = new Float32Array(w);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4, r = px[i] / 255, gr = px[i + 1] / 255, b = px[i + 2] / 255;
+    const mx = Math.max(r, gr, b), d = mx - Math.min(r, gr, b) + 1e-6;
+    let ton = mx === r ? ((gr - b) / d) % 6 : mx === gr ? (b - r) / d + 2 : (r - gr) / d + 4;
+    ton = (ton < 0 ? ton + 6 : ton) * 60;
+    if (ton >= 38 && ton <= 68 && d / (mx + 1e-6) > 0.42 && mx > 0.45) { zeilen[y]++; spalten[x]++; }
+  }
+  const lauf = (werte, anzahl, grenze) => {
+    let best = null, start = null, ende = 0, luecke = 0;
+    for (let i = 0; i <= werte.length + 4; i++) {
+      const v = i < werte.length ? werte[i] / anzahl : 0;
+      if (v > grenze) { if (start === null) start = i; luecke = 0; ende = i + 1; }
+      else if (start !== null && ++luecke > 3) { if (!best || ende - start > best[1] - best[0]) best = [start, ende]; start = null; luecke = 0; }
+    }
+    return best;
+  };
+  const ry = lauf(zeilen, w, 0.015), rx = lauf(spalten, h, 0.015);
+  if (!ry || !rx || ry[1] - ry[0] < h * 0.3 || rx[1] - rx[0] < w * 0.3) return null;
+  const verh = ((ry[1] - ry[0]) * bild.height / h) / ((rx[1] - rx[0]) * bild.width / w);
+  if (verh < 1.15 || verh > 1.6) return null;
+  return [rx[0] / w, ry[0] / h, rx[1] / w, ry[1] / h];
+}
+// Foto auf die Karte zuschneiden (unverändert, wenn keine Karte gefunden wurde)
+export async function karteImFoto(foto) {
+  const bild = await bitmap(foto);
+  const box = findeKarte(bild);
+  if (!box) return { bild, gefunden: false };
+  const b = Math.round((box[2] - box[0]) * bild.width), h = Math.round((box[3] - box[1]) * bild.height);
+  return { bild: ausschnitt(bild, box, b, h), gefunden: true };
+}
+function vergroessert(bild, bereich, maxKante = 1200, maxFaktor = 3) {
+  const b = (bereich[2] - bereich[0]) * bild.width, h = (bereich[3] - bereich[1]) * bild.height;
+  const f = Math.min(maxFaktor, maxKante / Math.max(b, h));
+  return ausschnitt(bild, bereich, Math.round(b * f), Math.round(h * f));
+}
+
 export function merkmal(bild) {
   // Kartenbild in zwei Stufen verkleinern (ähnlich wie PIL), dann je Farbkanal normieren
   const zwischen = ausschnitt(bild, ART, 64, 44);
@@ -206,17 +251,16 @@ export async function gemini(schluessel, teile, schema, modell = MODELL) {
 // ---------- Ganze Erkennung ----------
 // foto: Blob/File vom Handy. Ergebnis: {antwort, tipp: [ids], status: "ok"|"pruefen", bildaehnlich, anfragen}
 export async function bestimme(foto, index, schluessel, fortschritt = () => {}) {
-  const bild = await bitmap(foto);
+  const { bild, gefunden } = await karteImFoto(foto);
   const skala = Math.min(1, 1024 / Math.max(bild.width, bild.height));
   const klein = await alsJpeg(bild, Math.round(bild.width * skala), Math.round(bild.height * skala));
-  const sb = Math.round((STEMPEL[2] - STEMPEL[0]) * bild.width), sh = Math.round((STEMPEL[3] - STEMPEL[1]) * bild.height);
-  const faktor = Math.min(2, 800 / Math.max(sb, sh));
-  const stempelBild = ausschnitt(bild, STEMPEL, Math.round(sb * faktor), Math.round(sh * faktor));
+  const stempelBild = vergroessert(bild, STEMPEL, 800, 2);
   const stempel = await alsJpeg(stempelBild);
+  const nummer = await alsJpeg(vergroessert(bild, NUMMER));
   fortschritt("Gemini liest die Karte …");
   const frage = haken.gemini || gemini;
-  const antwort = await frage(schluessel, [klein, stempel, { text: PROMPT }], SCHEMA);
-  const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }) };
+  const antwort = await frage(schluessel, [klein, stempel, nummer, { text: PROMPT }], SCHEMA);
+  const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }), zugeschnitten: gefunden };
   let anfragen = 1;
   const kand = kandidaten(antwort, index);
   if (!kand.length) return { antwort, tipp: [], status: "pruefen", bildaehnlich: [], anfragen, ...extra };
@@ -271,13 +315,11 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
 // ---------- Ohne KI: nur Bildvergleich (Rückfall, wenn Gemini nicht erreichbar ist) ----------
 // Vergleicht mit den Karten der angegebenen Sets. Ergebnis wie bestimme(), immer "pruefen".
 export async function stempelAusschnitt(foto) {
-  const bild = await bitmap(foto);
-  const sb = Math.round((STEMPEL[2] - STEMPEL[0]) * bild.width), sh = Math.round((STEMPEL[3] - STEMPEL[1]) * bild.height);
-  const faktor = Math.min(2, 800 / Math.max(sb, sh));
-  return ausschnitt(bild, STEMPEL, Math.round(sb * faktor), Math.round(sh * faktor)).convertToBlob({ type: "image/jpeg", quality: 0.85 });
+  const { bild } = await karteImFoto(foto);
+  return vergroessert(bild, STEMPEL, 800, 2).convertToBlob({ type: "image/jpeg", quality: 0.85 });
 }
 export async function nurBild(foto, index, setIds, fortschritt = () => {}) {
-  const q = merkmal(await bitmap(foto));
+  const q = merkmal((await karteImFoto(foto)).bild);
   const karten = index.karten.filter(k => setIds.includes(k.set) && k.bild);
   const ergebnis = [];
   let fertig = 0;
