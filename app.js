@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.8 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.10 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -45,6 +45,7 @@ function inventar() {
     if (!e) {
       const sk = setInfo(z.set, z.nr);
       e = { key: z.key, id: sk?.id || z.id_karte || z.key, name: z.name || sk?.name || "Karte", set: z.set, nummer: z.nummer || sk?.nummer || "",
+            variante: z.variante || "normal",
             nr: z.nr ?? 999, seltenheit: sk?.seltenheit || "", symbol: sk?.symbol || "", sprache: z.sprache, auflage: z.auflage,
             preis: z.preis ?? sk?.preis ?? null, holo: !!sk?.holo, basis: 0, zugang: 0, verkauft: 0, neu: true, foto: null, zuletzt: "" };
       map.set(z.key, e);
@@ -100,12 +101,20 @@ function richtpreis(e) {
   else if (e.quelle === "TCGplayer") b = e.preis * 0.9;
   return b >= 5 ? Math.round(b * 2) / 2 : Math.max(0.1, Math.round(b * 10) / 10);
 }
-// Marktwert einer beliebigen Karte live von TCGdex (Median aus Trend, 7- und 30-Tage-Schnitt)
-async function livePreis(id) {
+// Marktwert einer beliebigen Karte live von TCGdex (Median aus Trend, 7- und 30-Tage-Schnitt).
+// Varianten: Reverse Holo = Glitzerpreis derselben Karte; Pokéball/Meisterball = eigenes Produkt, dessen Glitzerpreis.
+async function livePreis(id, variante = "normal") {
   try {
-    const d = await fetch(`https://api.tcgdex.net/v2/de/cards/${id}`).then(r => r.ok ? r.json() : null);
-    const c = d?.pricing?.cardmarket || {};
-    const w = [c.trend, c.avg7, c.avg30].filter(x => x > 0).sort((a, b) => a - b);
+    const d = await fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null);
+    let c = d?.pricing?.cardmarket || {}, glitzer = false;
+    if (variante !== "normal") {
+      const folie = { pokeball: "pokeball", meisterball: "masterball" }[variante];
+      const v = (d?.variants_detailed || []).find(v => folie ? v.foil === folie : v.type === "reverse" && !v.foil);
+      if (v?.pricing?.cardmarket) c = v.pricing.cardmarket; else if (folie) return null;
+      glitzer = true;
+    }
+    const f = k => c[glitzer ? k + "-holo" : k];
+    const w = [f("trend"), f("avg7"), f("avg30")].filter(x => x > 0).sort((a, b) => a - b);
     return w.length ? Math.round((w.length % 2 ? w[(w.length - 1) / 2] : (w[w.length / 2 - 1] + w[w.length / 2]) / 2) * 100) / 100 : null;
   } catch (e) { return null; }
 }
@@ -160,7 +169,7 @@ function sammlung(inv, fehlt) {
       <span class="bild">${bildHtml(bildVon(e), e.name)}</span>
       ${e.anzahl > 1 ? `<span class="stueck">×${e.anzahl}</span>` : ""}${e.neu || e.zugang ? `<span class="marke neu">Neu</span>` : ""}
       <span class="info"><span class="k-titel">${esc(e.name)}</span><span class="meta">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> ${e.symbol}</span>
-      <span class="chips"><span class="chip">${esc(e.sprache)}</span>${e.holo ? `<span class="chip gelb">Holo</span>` : ""}${e.auflage === "1. Auflage" ? `<span class="chip gelb">1. Aufl.</span>` : ""}</span>
+      <span class="chips"><span class="chip">${esc(e.sprache)}</span>${e.holo ? `<span class="chip gelb">Holo</span>` : ""}${e.auflage === "1. Auflage" ? `<span class="chip gelb">1. Aufl.</span>` : ""}${VARIANTE_KURZ[e.variante] ? `<span class="chip gelb">${VARIANTE_KURZ[e.variante]}</span>` : ""}</span>
       <span class="preis">${eur(e.preis)}</span></span>
     </button>`).join("") : `<div class="leer">Keine Karte passt zu diesen Filtern.</div>`;
 }
@@ -256,13 +265,13 @@ function zeigeKarte(key) {
   const teile = [`${e.anzahl} Stück`];
   if (e.zugang) teile.push(`${e.zugang} über die App hinzugefügt`);
   if (e.verkauft) teile.push(`${e.verkauft} verkauft`);
-  $("k-info").innerHTML = `<div class="muted">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)} · ${esc(e.auflage)}${e.seltenheit ? " · " + esc(e.seltenheit) : ""}</div>
+  $("k-info").innerHTML = `<div class="muted">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)} · ${esc(e.auflage)}${VARIANTE_KURZ[e.variante] ? " · " + VARIANTE[e.variante] : ""}${e.seltenheit ? " · " + esc(e.seltenheit) : ""}</div>
     <div>${teile.join(" · ")}</div>
     <div>Marktwert <strong class="num">${eur(e.preis)}</strong> pro Stück${richtpreis(e) ? ` · Angebotspreis ca. <strong class="num">${eur(richtpreis(e))}</strong>` : ""}</div>
     <div><a href="${cm(e.name)}" target="_blank" rel="noopener">Auf Cardmarket ansehen</a></div>`;
   $("k-aktionen").innerHTML = schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "";
   if (schreibbar) {
-    $("k-mehr").onclick = () => { $("dlg-karte").close(); oeffneNeu({ set: e.set, nr: e.nr, sprache: e.sprache, auflage: e.auflage, id: e.id }); };
+    $("k-mehr").onclick = () => { $("dlg-karte").close(); oeffneNeu({ set: e.set, nr: e.nr, sprache: e.sprache, auflage: e.auflage, variante: e.variante, id: e.id }); };
     $("k-verkauf").onclick = () => { $("dlg-karte").close(); oeffneVerkauf(e); };
   }
   $("dlg-karte").showModal();
@@ -283,38 +292,61 @@ document.addEventListener("click", e => {
 // ---------- Karte hinzufügen / prüfen ----------
 let neuFoto = null, anders = null, modus = "neu", erkennung = null;
 const kannErkennen = () => !!EINST.gemini && !!IDX;
+// Keine Vorauswahl: gespeichert wird nur eine erkannte oder bewusst gewählte Karte
 function fuelleSets() {
-  $("n-set").innerHTML = SETREIHE.filter(s => B.setkarten[s]).map(s => `<option value="${s}">${esc(setName(s))}</option>`).join("") + `<option value="anderes">Anderes Set …</option>`;
+  $("n-set").innerHTML = `<option value="">– Set wählen –</option>` + SETREIHE.filter(s => B.setkarten[s]).map(s => `<option value="${s}">${esc(setName(s))}</option>`).join("") + `<option value="anderes">Anderes Set …</option>`;
 }
 function fuelleKarten(nr) {
   const set = $("n-set").value, frei = set === "anderes";
-  $("n-karte").closest("label").hidden = frei; $("n-frei").hidden = !frei || !!anders; $("n-anders").hidden = !frei || !anders;
+  $("n-karte").closest("label").hidden = frei || !set; $("n-frei").hidden = !frei || !!anders; $("n-anders").hidden = !frei || !anders;
+  if (!set) { $("n-karte").innerHTML = ""; return; }
   if (frei) {
     if (anders) $("n-anders").innerHTML = `<div class="besitz zeile" style="border:0;padding:0;background:none"><div class="zeile">${bildHtml(anders.bild ? anders.bild + "/low.jpg" : null)}
       <div><strong>${esc(anders.de)}</strong><div class="muted" style="font-size:0.88rem">${esc(setName(anders.set))} · <span class="mono">${esc(nummerVon(anders))}</span></div></div></div></div>`;
     return;
   }
-  $("n-karte").innerHTML = B.setkarten[set].map(k => `<option value="${k.nr}">${k.nr} · ${esc(k.name)}${k.holo ? " (Holo)" : ""}</option>`).join("");
-  if (nr != null) $("n-karte").value = String(nr);
+  $("n-karte").innerHTML = `<option value="">– Karte wählen –</option>` + B.setkarten[set].map(k => `<option value="${k.nr}">${k.nr} · ${esc(k.name)}${k.holo ? " (Holo)" : ""}</option>`).join("");
+  $("n-karte").value = nr != null ? String(nr) : "";
 }
 function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr}/${s.offiziell}` : k.nr; }
 const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", IT: "Italienisch", ES: "Spanisch", PT: "Portugiesisch",
   NL: "Niederländisch", JP: "Japanisch", KO: "Koreanisch", ZH: "Chinesisch", andere: "andere Sprache" };
-// gewählte Karte als {set, nr, name, nummer, id, preis, bild}
+// Varianten neuerer Karten (gleiche Nummer, anderer Glitzer, anderer Preis)
+const VARIANTE = { normal: "Normal / Holo", reverse: "Reverse Holo", pokeball: "Pokéball-Muster", meisterball: "Meisterball-Muster" };
+const VARIANTE_KURZ = { reverse: "Reverse", pokeball: "Pokéball", meisterball: "Meisterball" };
+const VARIANTE_VON_GEMINI = { reverse: "reverse", pokeball: "pokeball", meisterball: "meisterball" };
+const schluessel = (id, sprache, auflage, variante) => `${id}|${sprache}|${auflage}` + (VARIANTE_KURZ[variante] ? `|${variante}` : "");
+const VARIANTENPREIS = {};
+function variantenPreis(id, variante) {   // live von TCGdex, einmal je Karte und Variante
+  const k = `${id}|${variante}`;
+  if (!(k in VARIANTENPREIS)) {
+    VARIANTENPREIS[k] = undefined;
+    livePreis(id, variante).then(p => { VARIANTENPREIS[k] = p; if ($("dlg-neu").open) zeigeBesitz(); });
+  }
+  return VARIANTENPREIS[k];
+}
+// gewählte Karte als {set, nr, name, nummer, id, preis, bild, variante}
 function gewaehlt() {
-  const set = $("n-set").value;
+  const set = $("n-set").value, variante = $("n-variante").value;
+  let g = null;
   if (set === "anderes") {
     if (!anders) return null;
     const nr = /^\d+$/.test(anders.nr) ? Number(anders.nr) : anders.nr;
-    return { set: anders.set, nr, name: anders.de, nummer: nummerVon(anders), id: anders.id, preis: anders.preis ?? null, bild: anders.bild && anders.bild + "/low.jpg" };
+    g = { set: anders.set, nr, name: anders.de, nummer: nummerVon(anders), id: anders.id, preis: anders.preis ?? null, bild: anders.bild && anders.bild + "/low.jpg" };
+  } else {
+    if (!set || !$("n-karte").value) return null;
+    const nr = Number($("n-karte").value), sk = setInfo(set, nr);
+    if (!sk) return null;
+    g = { set, nr, name: sk.name, nummer: sk.nummer, id: sk.id, preis: sk.preis, bild: setBild(set, nr) };
   }
-  const nr = Number($("n-karte").value), sk = setInfo(set, nr);
-  return sk && { set, nr, name: sk.name, nummer: sk.nummer, id: sk.id, preis: sk.preis, bild: setBild(set, nr) };
+  g.variante = variante;
+  if (VARIANTE_KURZ[variante]) g.preis = variantenPreis(g.id, variante) ?? null;
+  return g;
 }
 function zeigeBesitz() {
   const feld = $("n-besitz"), g = gewaehlt();
   if (!g) { feld.hidden = true; return; }
-  const sp = $("n-sprache").value, au = $("n-auflage").value;
+  const sp = $("n-sprache").value, au = $("n-auflage").value, va = g.variante;
   const hat = inventar().filter(e => (e.set === g.set && String(e.nr) === String(g.nr)) || gleicherPlatz(e, g));
   const karte = `${esc(g.name)} · ${esc(setName(g.set))} <span class="mono">${esc(g.nummer)}</span>`;
   const huelle = (klasse, text) => {
@@ -322,11 +354,13 @@ function zeigeBesitz() {
     feld.innerHTML = `<div class="zeile">${g.bild ? `<img src="${esc(g.bild)}" alt="Bild der erkannten Karte">` : ""}<div>${text}<div class="muted" style="font-size:0.88rem">${karte}</div></div></div>`;
   };
   feld.hidden = false;
-  if (!hat.length) { huelle("fehlt", `<strong class="gross-text">Fehlt dir noch!</strong><div>Marktwert ca. ${eur(g.preis)}</div>`); return; }
-  const teile = hat.map(e => `${e.anzahl}× ${SPRACHE[e.sprache] || e.sprache}${e.auflage === "1. Auflage" ? " (1. Auflage)" : ""}`);
-  const genau = hat.some(e => e.sprache === sp && e.auflage === au);
-  huelle("hat", `<strong class="gross-text">Hast du schon</strong><div>${teile.join(", ")}.` +
-    (genau ? " Diese wäre ein weiteres Exemplar." : ` Die Variante ${SPRACHE[sp] || sp}${au === "1. Auflage" ? ", 1. Auflage" : ""} hast du noch nicht.`) + `</div>`);
+  const variantenText = VARIANTE_KURZ[va] ? `<div>Variante: <strong>${VARIANTE[va]}</strong></div>` : "";
+  if (!hat.length) { huelle("fehlt", `<strong class="gross-text">Fehlt dir noch!</strong>${variantenText}<div>Marktwert ca. ${eur(g.preis)}</div>`); return; }
+  const teile = hat.map(e => `${e.anzahl}× ${SPRACHE[e.sprache] || e.sprache}${e.auflage === "1. Auflage" ? " (1. Auflage)" : ""}${VARIANTE_KURZ[e.variante] ? " " + VARIANTE[e.variante] : ""}`);
+  const genau = hat.some(e => e.sprache === sp && e.auflage === au && (e.variante || "normal") === va);
+  huelle("hat", `<strong class="gross-text">Hast du schon</strong>${variantenText}<div>${teile.join(", ")}.` +
+    (genau ? " Diese wäre ein weiteres Exemplar." : ` Die Variante ${SPRACHE[sp] || sp}${au === "1. Auflage" ? ", 1. Auflage" : ""}${VARIANTE_KURZ[va] ? ", " + VARIANTE[va] : ""} hast du noch nicht.`) +
+    `</div>${VARIANTE_KURZ[va] ? `<div>Marktwert ca. ${eur(g.preis)}</div>` : ""}`);
 }
 function setzeModus(m) {
   modus = m;
@@ -341,7 +375,7 @@ function setzeModus(m) {
 }
 $("n-korrigieren").addEventListener("click", () => { $("n-formular").hidden = false; $("n-korrigieren").hidden = true; if (erkennung?.tipp.length > 1) zeigeKandidaten(); });
 $("n-set").addEventListener("change", () => { anders = $("n-set").value === "anderes" ? anders : null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); });
-["n-karte", "n-sprache", "n-auflage"].forEach(id => $(id).addEventListener("change", () => { zeigeBesitz(); markiereKandidat(); zeigeStempel(); }));
+["n-karte", "n-sprache", "n-auflage", "n-variante"].forEach(id => $(id).addEventListener("change", () => { zeigeBesitz(); markiereKandidat(); zeigeStempel(); }));
 $("n-wechsel").addEventListener("click", () => {
   setzeModus("neu"); $("n-datum").value = heute(); $("n-anzahl").value = 1; $("n-erkennen").hidden = true; $("n-formular").hidden = false;
 });
@@ -355,9 +389,9 @@ function oeffneNeu(vor = {}) {
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
   $("n-kandidaten").hidden = true; $("n-stempel").hidden = true; $("n-nummer").value = "";
   if (vor.set && !B.setkarten[vor.set] && vor.id && IDX?.karte(vor.id)) { anders = { ...IDX.karte(vor.id) }; $("n-set").value = "anderes"; }
-  else $("n-set").value = vor.set && B.setkarten[vor.set] ? vor.set : "base1";
+  else $("n-set").value = vor.set && B.setkarten[vor.set] ? vor.set : "";
   fuelleKarten(vor.nr);
-  $("n-sprache").value = vor.sprache || "DE"; $("n-auflage").value = vor.auflage || "normal";
+  $("n-sprache").value = vor.sprache || "DE"; $("n-auflage").value = vor.auflage || "normal"; $("n-variante").value = vor.variante || "normal";
   $("n-herkunft").value = vor.herkunft || "Gekauft"; $("n-datum").value = heute(); $("n-anzahl").value = 1;
   setzeModus(m);
   if (m === "pruefen") {
@@ -482,6 +516,7 @@ function zeigeErkennung(ohneKI = false) {
     if (r) {
       $("n-sprache").value = SPRACHE[r.sprache] && r.sprache !== "andere" ? r.sprache : "andere";
       $("n-auflage").value = r.erste_auflage ? "1. Auflage" : "normal";
+      $("n-variante").value = VARIANTE_VON_GEMINI[r.glitzer] || "normal";
     }
     zeigeBesitz(); zeigeStempel();
     const g = gewaehlt();
@@ -515,16 +550,21 @@ $("form-neu").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (modus === "pruefen" || !schreibbar) return;
   const meldung = $("n-speichern-meldung"), knopf = $("n-speichern");
-  const sprache = $("n-sprache").value, auflage = $("n-auflage").value;
+  const sprache = $("n-sprache").value, auflage = $("n-auflage").value, variante = $("n-variante").value;
   let eintrag;
+  if ($("n-set").value !== "anderes" && !gewaehlt()) {
+    meldung.textContent = "Noch keine Karte gewählt: Foto machen und erkennen lassen, die Nummer eintippen oder Set und Karte auswählen.";
+    return;
+  }
   if ($("n-set").value === "anderes" && !anders) {
     const text = $("n-freitext").value.trim();
     if (!text) { meldung.textContent = "Bitte Name, Set und Nummer eintragen."; return; }
     eintrag = { set: "anderes", nr: 999, name: text, nummer: "", key: `anderes-${text.toLowerCase().replace(/[^a-z0-9äöüß]+/g, "-")}|${sprache}|${auflage}` };
   } else {
     const g = gewaehlt();
-    eintrag = { set: g.set, nr: g.nr, name: g.name, nummer: g.nummer, id_karte: g.id, key: `${g.id}|${sprache}|${auflage}`,
-                ...(B.setkarten[g.set] ? {} : { preis: g.preis ?? null }) };
+    eintrag = { set: g.set, nr: g.nr, name: g.name, nummer: g.nummer, id_karte: g.id, key: schluessel(g.id, sprache, auflage, variante),
+                ...(VARIANTE_KURZ[variante] ? { variante } : {}),
+                ...(B.setkarten[g.set] && !VARIANTE_KURZ[variante] ? {} : { preis: g.preis ?? null }) };
   }
   const anzahl = Math.max(1, Math.min(99, parseInt($("n-anzahl").value, 10) || 1));
   const id = neueId();
@@ -549,7 +589,7 @@ $("form-neu").addEventListener("submit", async ev => {
 let verkaufKarte = null;
 function oeffneVerkauf(e) {
   verkaufKarte = e; $("form-verkauf").reset();
-  $("vk-karte").textContent = `${e.name} · ${setName(e.set)} ${e.nummer} · ${e.sprache} · du hast ${e.anzahl}`;
+  $("vk-karte").textContent = `${e.name} · ${setName(e.set)} ${e.nummer} · ${e.sprache}${VARIANTE_KURZ[e.variante] ? " · " + VARIANTE[e.variante] : ""} · du hast ${e.anzahl}`;
   $("vk-anzahl").max = e.anzahl; $("vk-anzahl").value = 1; $("vk-datum").value = heute(); $("vk-meldung").textContent = "";
   if (richtpreis(e)) $("vk-preis").placeholder = "Vorschlag " + zahl.format(richtpreis(e));
   $("dlg-verkauf").showModal();
@@ -563,6 +603,7 @@ $("form-verkauf").addEventListener("submit", async ev => {
   knopf.disabled = true; meldung.textContent = "Speichert …";
   try {
     const neu = { id: neueId(), key: e.key, name: e.name, set: e.set, nr: e.nr, nummer: e.nummer, sprache: e.sprache, auflage: e.auflage,
+      ...(VARIANTE_KURZ[e.variante] ? { variante: e.variante } : {}),
       anzahl, preis, datum: $("vk-datum").value || heute(), plattform: $("vk-plattform").value, notiz: $("vk-notiz").value.trim(), erstellt: new Date().toISOString() };
     VK = await speicher.aendern(PFADE.verkaeufe, l => [...l, neu], `Verkauf: ${anzahl}× ${e.name}`);
     merkeStand(); alles();

@@ -21,12 +21,16 @@ Bestimme die Karte genau:
 - erste_auflage: nur true, wenn in Bild 2 deutlich ein Stempel "Edition 1" bzw. "1st Edition" (schwarzer Kreis/Rahmen
   mit einer 1) zu erkennen ist. Ein Schatten, Holo-Glanz oder Text ist kein Stempel.
 - holo: true, wenn das Kartenbild glitzert (Holo)
+- glitzer: "keiner" (nichts glitzert), "bild" (nur das Kartenbild glitzert = Holo), "reverse" (die Karte glitzert
+  außerhalb des Kartenbilds = Reverse Holo), "pokeball" bzw. "meisterball" (Reverse-Glitzer mit vielen kleinen
+  Pokéball- bzw. Meisterball-Symbolen als Muster)
 - sicher: false, wenn du bei Set oder Nummer unsicher bist`;
 
 const SCHEMA = { type: "OBJECT", properties: {
   name: { type: "STRING" }, name_en: { type: "STRING" }, set: { type: "STRING" }, nummer: { type: "STRING" },
-  sprache: { type: "STRING" }, erste_auflage: { type: "BOOLEAN" }, holo: { type: "BOOLEAN" }, sicher: { type: "BOOLEAN" } },
-  required: ["name", "name_en", "set", "nummer", "sprache", "erste_auflage", "holo", "sicher"] };
+  sprache: { type: "STRING" }, erste_auflage: { type: "BOOLEAN" }, holo: { type: "BOOLEAN" }, sicher: { type: "BOOLEAN" },
+  glitzer: { type: "STRING", enum: ["keiner", "bild", "reverse", "pokeball", "meisterball"] } },
+  required: ["name", "name_en", "set", "nummer", "sprache", "erste_auflage", "holo", "glitzer", "sicher"] };
 
 const PROMPT_WAHL = liste => `Bild 1 ist ein Foto einer Pokémon-Karte. Die weiteren Bilder sind Kandidaten (${liste}).
 Welcher Kandidat ist genau dieselbe Karte? Vergleiche Kartenbild, Set-Symbol rechts unter dem Bild und die Nummer unten rechts.
