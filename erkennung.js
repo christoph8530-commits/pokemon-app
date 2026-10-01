@@ -345,7 +345,23 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
       } else status = "pruefen";
     } else status = "pruefen";
   }
-  return { antwort, tipp: kand.slice(0, 3).map(k => k.id), status, bildaehnlich: kand.slice(0, 3).map(k => k.bild), anfragen, ...extra };
+  const tipp = kand.slice(0, 3).map(k => k.id), aehnlich = kand.slice(0, 3).map(k => k.bild);
+  // unsicher: zusätzlich die gleichnamige Karte mit dem ähnlichsten Bild vorschlagen (falls Gemini die Nummer verlesen hat)
+  if (status === "pruefen") {
+    fortschritt("Suche das ähnlichste Kartenbild …");
+    const alle = gleichnamige(antwort, index).slice(0, 200);
+    let beste = null;
+    await Promise.all(alle.map(async k => {
+      const ref = await refBild(k);
+      const wert = ref ? skalar(merkmal(ref), q) : -1;
+      if (!beste || wert > beste.wert) beste = { id: kanonisch(k.id), wert };
+    }));
+    if (beste && beste.wert > 0.3 && !tipp.includes(beste.id)) {
+      tipp.splice(Math.min(1, tipp.length), 0, beste.id); aehnlich.splice(Math.min(1, aehnlich.length), 0, beste.wert);
+      tipp.length = Math.min(tipp.length, 3); aehnlich.length = tipp.length;
+    }
+  }
+  return { antwort, tipp, status, bildaehnlich: aehnlich, anfragen, ...extra };
 }
 
 // ---------- Ohne KI: nur Bildvergleich (Rückfall, wenn Gemini nicht erreichbar ist) ----------
