@@ -18,7 +18,7 @@ Bestimme die Karte genau:
 - nummer: die aufgedruckte Kartennummer genau wie gedruckt, z. B. "35/102", "008/088" oder "TG05/TG30" (bei neueren Karten links unten nach dem Set-Kürzel, das Kürzel selbst nicht mit angeben). Manche Karten (z. B. Basis-Energien) haben nur eine Nummer ohne Gesamtzahl wie "007" – dann genau so. Nie eine Nummer erfinden: ist keine lesbar, leer lassen. Bei Promokarten steht nur eine
   Zahl (oft im schwarzen Stern oder als "Nr. 5"), dann nur diese Zahl. Lies die Ziffern sorgfältig einzeln, am besten in Bild 3.
 - set_kuerzel: das aufgedruckte Set-Kürzel links unten bei neueren Karten (2–4 Buchstaben vor der Sprachangabe und Nummer,
-  z. B. "MEE", "CRI", "POR", "SVI"), sonst leer. Nur angeben, was wirklich aufgedruckt ist.
+  z. B. "MEE", "CRI", "POR", "SVI"; Basis-Energien der Mega-Entwicklung-Serie tragen "MEE"), sonst leer. Nur angeben, was wirklich aufgedruckt ist.
 - sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, PT, NL, JP, KO, ZH oder andere. Achte auf die Wörter,
   nicht auf einzelne Begriffe: "Énergie … de base" = FR, "Basis-…-Energie" = DE, "Basic … Energy" = EN.
   Bei neueren Karten steht die Sprache auch neben dem Set-Kürzel (z. B. "MEE FR").
@@ -134,15 +134,23 @@ export function nachNummer(nummer, index) {
     .map(k => ({ p: 3.8, id: k.id, passt: true, passtVoll: totG != null, bild: 0, hatBild: !!k.bild }));
 }
 
+// Energiekarten heißen je nach Druck „Basic Darkness Energy“ oder nur „Darkness Energy“ – für den Vergleich gleich
+const ohneBasis = n => n.includes("energ") ? n.replace(/^(basic|basis)/, "").replace(/(debase|base)$/, "") : n;
+// aufgedrucktes Kürzel mit einem verlesenen Buchstaben (MEG statt MEE)
+const kuerzelNah = (a, b) => a.length === 3 && b.length === 3 && [...a].filter((c, i) => c !== b[i]).length === 1;
 export function kandidaten(r, index) {
   const { nrG, totG, nrPasst } = nummerInfo(r.nummer || "");
   const nEn = norm(r.name_en), nName = norm(r.name), nSet = norm(r.set);
+  const bEn = ohneBasis(nEn), bName = ohneBasis(nName);
   const kuerzel = String(r.set_kuerzel || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const setAehnlich = {};
   const liste = [];
   for (const k of index.karten) {
     let name = Math.max(aehnlich(nEn, k.nen, true), aehnlich(nName, k.nde, true), aehnlich(nName, k.nen, true));
     for (const w of k.nw) if (name < 1) name = Math.max(name, aehnlich(nName, w, true));   // französische usw. Namen
+    if (name < 1 && (bEn !== nEn || bName !== nName || k.nen.includes("energ")))
+      name = Math.max(name, aehnlich(bEn, ohneBasis(k.nen), true), aehnlich(bName, ohneBasis(k.nde), true),
+                      ...k.nw.map(w => aehnlich(bName, ohneBasis(w), true)));
     if (name < 0.85) continue;
     const s = index.sets[k.set];
     let p = 2 * name;
@@ -154,6 +162,7 @@ export function kandidaten(r, index) {
     // aufgedrucktes Set-Kürzel (CRI, MEE, …): bestimmt das Set eindeutig
     const kuerzelOk = !!kuerzel && kuerzel === s.kuerzel;
     if (kuerzelOk) p += 1.5;
+    else if (kuerzel && s.kuerzel && kuerzelNah(kuerzel, s.kuerzel)) p += 0.5;
     p += 0.6 * (setAehnlich[k.set] ??= aehnlich(nSet, norm(s.name), true));
     // passtVoll: Nummer UND Gesamtzahl stimmen (z. B. 130/132) – dann hat das gegen das Bild Vorrang
     liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95,
