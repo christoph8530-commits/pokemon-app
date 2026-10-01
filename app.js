@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.10 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.11 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -312,7 +312,7 @@ function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr
 const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", IT: "Italienisch", ES: "Spanisch", PT: "Portugiesisch",
   NL: "Niederländisch", JP: "Japanisch", KO: "Koreanisch", ZH: "Chinesisch", andere: "andere Sprache" };
 // Varianten neuerer Karten (gleiche Nummer, anderer Glitzer, anderer Preis)
-const VARIANTE = { normal: "Normal / Holo", reverse: "Reverse Holo", pokeball: "Pokéball-Muster", meisterball: "Meisterball-Muster" };
+const VARIANTE = { normal: "Standard (wie gedruckt)", reverse: "Reverse Holo", pokeball: "Pokéball-Muster", meisterball: "Meisterball-Muster" };
 const VARIANTE_KURZ = { reverse: "Reverse", pokeball: "Pokéball", meisterball: "Meisterball" };
 const VARIANTE_VON_GEMINI = { reverse: "reverse", pokeball: "pokeball", meisterball: "meisterball" };
 const schluessel = (id, sprache, auflage, variante) => `${id}|${sprache}|${auflage}` + (VARIANTE_KURZ[variante] ? `|${variante}` : "");
@@ -715,6 +715,16 @@ function starteAnzeige() {
   $("fab-pruefen").hidden = false;
   alles();
 }
+function neueVersionHinweis() {
+  if ($("neue-version")) return;
+  const b = document.createElement("button");
+  b.id = "neue-version"; b.type = "button"; b.className = "knopf voll";
+  b.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top, 0px));z-index:30;padding:8px 14px";
+  b.textContent = "Neue Version verfügbar – tippen zum Aktualisieren";
+  b.onclick = () => location.reload();
+  document.body.append(b);
+}
+
 // Neue Sets: Die Montags-Automatik aktualisiert das Kartenverzeichnis im privaten Repo. Die App schaut
 // höchstens einmal am Tag nach, ob es dort ein neueres gibt, und merkt es sich auf dem Gerät.
 const VERZEICHNIS = "webapp/daten/karten-index.json";
@@ -753,7 +763,14 @@ async function start() {
   await verbinde();
   neuesVerzeichnis();
   if (TEST) status("Testmodus: Daten vom PC, Änderungen nur im Arbeitsspeicher.", "ok");
-  if ("serviceWorker" in navigator && !TEST) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && !TEST) {
+    // Neue Version: der Service Worker übernimmt sofort – dann einen Hinweis zum Neuladen zeigen
+    const hatteSteuerung = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hatteSteuerung) neueVersionHinweis(); });
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
+  }
 }
 window.addEventListener("hashchange", () => zeigeTab(location.hash.slice(1)));
 start();
