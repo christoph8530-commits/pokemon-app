@@ -15,9 +15,13 @@ Bestimme die Karte genau:
 - set: englischer Name des Sets, erkennbar am Set-Symbol rechts unter dem Bild bzw. bei neueren Karten am Set-Kürzel links unten (z. B. "Base Set", "Jungle", "Fossil",
   "Team Rocket", "Gym Heroes", "Gym Challenge", "Neo Genesis"). Ein schwarzer Stern mit Nummer als Symbol bedeutet
   "Wizards Black Star Promos". Hat die Karte kein Set-Symbol, gib "Base Set" an.
-- nummer: die aufgedruckte Kartennummer genau wie gedruckt, z. B. "35/102", "008/088" oder "TG05/TG30" (bei neueren Karten links unten nach dem Set-Kürzel, das Kürzel selbst nicht mit angeben). Bei Promokarten steht nur eine
+- nummer: die aufgedruckte Kartennummer genau wie gedruckt, z. B. "35/102", "008/088" oder "TG05/TG30" (bei neueren Karten links unten nach dem Set-Kürzel, das Kürzel selbst nicht mit angeben). Manche Karten (z. B. Basis-Energien) haben nur eine Nummer ohne Gesamtzahl wie "007" – dann genau so. Nie eine Nummer erfinden: ist keine lesbar, leer lassen. Bei Promokarten steht nur eine
   Zahl (oft im schwarzen Stern oder als "Nr. 5"), dann nur diese Zahl. Lies die Ziffern sorgfältig einzeln, am besten in Bild 3.
-- sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, PT, NL, JP, KO, ZH oder andere (Energiekarten: „ENERGY“ = EN, „ENERGIE“ = DE)
+- set_kuerzel: das aufgedruckte Set-Kürzel links unten bei neueren Karten (2–4 Buchstaben vor der Sprachangabe und Nummer,
+  z. B. "MEE", "CRI", "POR", "SVI"), sonst leer. Nur angeben, was wirklich aufgedruckt ist.
+- sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, PT, NL, JP, KO, ZH oder andere. Achte auf die Wörter,
+  nicht auf einzelne Begriffe: "Énergie … de base" = FR, "Basis-…-Energie" = DE, "Basic … Energy" = EN.
+  Bei neueren Karten steht die Sprache auch neben dem Set-Kürzel (z. B. "MEE FR").
 - erste_auflage: nur true, wenn in Bild 2 deutlich ein Stempel "Edition 1" bzw. "1st Edition" (schwarzer Kreis/Rahmen
   mit einer 1) zu erkennen ist. Ein Schatten, Holo-Glanz oder Text ist kein Stempel.
 - holo: true, wenn das Kartenbild glitzert (Holo)
@@ -29,8 +33,8 @@ Bestimme die Karte genau:
 const SCHEMA = { type: "OBJECT", properties: {
   name: { type: "STRING" }, name_en: { type: "STRING" }, set: { type: "STRING" }, nummer: { type: "STRING" },
   sprache: { type: "STRING" }, erste_auflage: { type: "BOOLEAN" }, holo: { type: "BOOLEAN" }, sicher: { type: "BOOLEAN" },
-  glitzer: { type: "STRING", enum: ["keiner", "bild", "reverse", "pokeball", "meisterball"] } },
-  required: ["name", "name_en", "set", "nummer", "sprache", "erste_auflage", "holo", "glitzer", "sicher"] };
+  glitzer: { type: "STRING", enum: ["keiner", "bild", "reverse", "pokeball", "meisterball"] }, set_kuerzel: { type: "STRING" } },
+  required: ["name", "name_en", "set", "set_kuerzel", "nummer", "sprache", "erste_auflage", "holo", "glitzer", "sicher"] };
 
 const PROMPT_WAHL = liste => `Bild 1 ist ein Foto einer Pokémon-Karte. Die weiteren Bilder sind Kandidaten (${liste}).
 Welcher Kandidat ist genau dieselbe Karte? Vergleiche Kartenbild, Set-Symbol rechts unter dem Bild und die Nummer unten rechts.
@@ -60,8 +64,8 @@ export class Index {
   constructor(daten) {
     this.stand = daten.stand;
     this.sets = {};
-    for (const [id, [name, name_de, serie, offiziell, gesamt, pfad]] of Object.entries(daten.sets))
-      this.sets[id] = { id, name, name_de, serie, offiziell, gesamt, pfad };
+    for (const [id, [name, name_de, serie, offiziell, gesamt, pfad, kuerzel]] of Object.entries(daten.sets))
+      this.sets[id] = { id, name, name_de, serie, offiziell, gesamt, pfad, kuerzel: (kuerzel || "").toUpperCase() };
     this.karten = [];
     for (const [sid, liste] of Object.entries(daten.karten))
       for (const [nr, en, de, bild, weitere] of liste)
@@ -133,6 +137,7 @@ export function nachNummer(nummer, index) {
 export function kandidaten(r, index) {
   const { nrG, totG, nrPasst } = nummerInfo(r.nummer || "");
   const nEn = norm(r.name_en), nName = norm(r.name), nSet = norm(r.set);
+  const kuerzel = String(r.set_kuerzel || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const setAehnlich = {};
   const liste = [];
   for (const k of index.karten) {
@@ -146,9 +151,13 @@ export function kandidaten(r, index) {
     else if (nrG && /^\d+$/.test(k.nr) && Math.abs(Number(k.nr) - Number(nrG)) <= 9) p += 0.3;
     const totOk = totG == null || totG === s.offiziell || totG === s.gesamt;
     if (totG && totOk) p += 0.8;
+    // aufgedrucktes Set-Kürzel (CRI, MEE, …): bestimmt das Set eindeutig
+    const kuerzelOk = !!kuerzel && kuerzel === s.kuerzel;
+    if (kuerzelOk) p += 1.5;
     p += 0.6 * (setAehnlich[k.set] ??= aehnlich(nSet, norm(s.name), true));
     // passtVoll: Nummer UND Gesamtzahl stimmen (z. B. 130/132) – dann hat das gegen das Bild Vorrang
-    liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95, passtVoll: nrOk && totG != null && totOk && name >= 0.95, bild: 0, hatBild: !!k.bild });
+    liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95,
+                 passtVoll: nrOk && (totG != null && totOk || kuerzelOk) && name >= 0.95, bild: 0, hatBild: !!k.bild });
   }
   liste.sort((a, b) => b.p - a.p);
   return ohneDoppelte(liste).slice(0, 8);
