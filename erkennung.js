@@ -105,13 +105,11 @@ export function aehnlich(a, b, schonNorm = false) {
 }
 
 // ---------- Zuordnung ----------
-export function kandidaten(r, index) {
-  const nummer = r.nummer || "";
+// Kartennummer verstehen: "35/102", "008/088", "TG05/TG30", "SWSH123", "H06"; ein mitgelesenes Set-Kürzel (SVI025) stört nicht
+export function nummerInfo(nummer = "") {
   const m = nummer.match(/(\d+)\s*\/\s*(\d+)/), nur = nummer.match(/^\D*(\d+)\D*$/);
   const nrG = m ? m[1].replace(/^0+/, "") : nur ? nur[1].replace(/^0+/, "") : null;
   const totG = m ? Number(m[2]) : null;
-  const nEn = norm(r.name_en), nName = norm(r.name), nSet = norm(r.set);
-  // Nummern mit Buchstaben (TG05, SWSH123, H06); ein mitgelesenes Set-Kürzel (SVI025) stört nicht
   const roh = nummer.toUpperCase().replace(/\s/g, "").split("/")[0], mt = roh.match(/^([A-Z]*)(\d+)$/);
   const nrPasst = nr => {
     const n = nr.toUpperCase();
@@ -119,6 +117,18 @@ export function kandidaten(r, index) {
     const mk = n.match(/^([A-Z]*)(\d+)$/);
     return mk ? Number(mk[2]) === Number(mt[2]) && (mk[1] === mt[1] || mk[1] === "") : n === roh;
   };
+  return { nrG, totG, nrPasst };
+}
+// alle Karten mit dieser Nummer (und Gesamtzahl) – wenn kein Name bekannt ist
+export function nachNummer(nummer, index) {
+  const { totG, nrPasst } = nummerInfo(nummer);
+  return index.karten.filter(k => nrPasst(k.nr) && (totG == null || totG === index.sets[k.set].offiziell || totG === index.sets[k.set].gesamt))
+    .map(k => ({ p: 3.8, id: k.id, passt: true, passtVoll: totG != null, bild: 0, hatBild: !!k.bild }));
+}
+
+export function kandidaten(r, index) {
+  const { nrG, totG, nrPasst } = nummerInfo(r.nummer || "");
+  const nEn = norm(r.name_en), nName = norm(r.name), nSet = norm(r.set);
   const setAehnlich = {};
   const liste = [];
   for (const k of index.karten) {
@@ -284,7 +294,8 @@ export async function gemini(schluessel, teile, schema, modell = MODELL) {
 
 // ---------- Ganze Erkennung ----------
 // foto: Blob/File vom Handy. Ergebnis: {antwort, tipp: [ids], status: "ok"|"pruefen", bildaehnlich, anfragen}
-export async function bestimme(foto, index, schluessel, fortschritt = () => {}) {
+// hinweis: Kartennummer, die der Besitzer eingetippt hat – hat Vorrang vor dem, was Gemini liest
+export async function bestimme(foto, index, schluessel, fortschritt = () => {}, hinweis = "") {
   fortschritt("Suche die Karte im Foto …");
   const { bild, gefunden, ueberGemini } = await karteImFoto(foto, schluessel);
   const skala = Math.min(1, 1024 / Math.max(bild.width, bild.height));
@@ -294,14 +305,16 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
   const nummer = await alsJpeg(vergroessert(bild, NUMMER));
   fortschritt("Gemini liest die Karte …");
   const frage = haken.gemini || gemini;
-  const antwort = await frage(schluessel, [klein, stempel, nummer, { text: PROMPT }], SCHEMA);
-  const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }), zugeschnitten: gefunden };
+  const antwort = await frage(schluessel, [klein, stempel, nummer,
+    { text: PROMPT + (hinweis ? `\nHinweis vom Besitzer: Die Kartennummer lautet ${hinweis}.` : "") }], SCHEMA);
+  if (hinweis) antwort.nummer = hinweis;
+  const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }), zugeschnitten: gefunden, q: merkmal(bild) };
   let anfragen = 1 + (ueberGemini ? 1 : 0);
   const kand = kandidaten(antwort, index);
   if (!kand.length) return { antwort, tipp: [], status: "pruefen", bildaehnlich: [], anfragen, ...extra };
 
   fortschritt("Vergleiche mit den Kartenbildern …");
-  const q = merkmal(bild);
+  const q = extra.q;
   await Promise.all(kand.map(async k => {
     const ref = await refBild(index.karte(k.id));
     k.bild = ref ? skalar(merkmal(ref), q) : 0;
@@ -362,6 +375,27 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
     }
   }
   return { antwort, tipp, status, bildaehnlich: aehnlich, anfragen, ...extra };
+}
+
+// ---------- Mit eingetippter Nummer neu zuordnen (ohne neue Anfrage an Gemini) ----------
+// alt: bisheriges Ergebnis (Gemini-Antwort und Bild-Fingerabdruck), darf leer sein
+export async function neuZuordnen(alt, nummer, index) {
+  const r = alt?.antwort ? { ...alt.antwort, nummer } : null;
+  let kand = r ? kandidaten(r, index) : [];
+  if (!kand.some(k => k.passt)) {                       // Name passt zu keiner Karte mit dieser Nummer: nur nach Nummer
+    const da = new Set(kand.map(k => k.id));
+    kand = kand.concat(nachNummer(nummer, index).filter(k => !da.has(k.id)));
+  }
+  kand = ohneDoppelte(kand);
+  if (alt?.q) await Promise.all(kand.slice(0, 40).map(async k => {
+    const ref = await refBild(index.karte(k.id));
+    k.bild = ref ? skalar(merkmal(ref), alt.q) : 0;
+    k.p += 1.5 * k.bild;
+  }));
+  kand.sort((a, b) => b.p - a.p);
+  const eindeutig = kand.length && kand[0].passtVoll && (kand.length < 2 || kand[0].p - kand[1].p >= 0.5);
+  return { antwort: r, tipp: kand.slice(0, 3).map(k => k.id), status: eindeutig ? "ok" : "pruefen",
+           bildaehnlich: kand.slice(0, 3).map(k => k.bild), anfragen: 0, stempel: alt?.stempel, q: alt?.q };
 }
 
 // ---------- Ohne KI: nur Bildvergleich (Rückfall, wenn Gemini nicht erreichbar ist) ----------

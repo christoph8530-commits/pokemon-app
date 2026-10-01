@@ -1,6 +1,6 @@
 // Pokémon-Sammlung – eigenständige Web-App (ohne Claude).
 // Daten: privates GitHub-Repo (speicher.js). Erkennung: Gemini + Nachschlagewerk (erkennung.js).
-import { Index, bestimme, nurBild, haken, kanonisch, ERSTAUFLAGE_SETS } from "./erkennung.js";
+import { Index, bestimme, nurBild, neuZuordnen, haken, kanonisch, ERSTAUFLAGE_SETS } from "./erkennung.js";
 import { GitHubSpeicher, TestSpeicher, PFADE } from "./speicher.js";
 
 // ---------- Grundlagen ----------
@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.7 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.8 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -353,7 +353,7 @@ function oeffneNeu(vor = {}) {
   $("n-vorschau").innerHTML = `<div class="leerbild"></div>`;
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.";
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
-  $("n-kandidaten").hidden = true; $("n-stempel").hidden = true;
+  $("n-kandidaten").hidden = true; $("n-stempel").hidden = true; $("n-nummer").value = "";
   if (vor.set && !B.setkarten[vor.set] && vor.id && IDX?.karte(vor.id)) { anders = { ...IDX.karte(vor.id) }; $("n-set").value = "anderes"; }
   else $("n-set").value = vor.set && B.setkarten[vor.set] ? vor.set : "base1";
   fuelleKarten(vor.nr);
@@ -459,10 +459,23 @@ async function erkenne({ ohneKI = false } = {}) {
   try {
     erkennung = ohneKI
       ? await nurBild(neuFoto, IDX, SETREIHE.filter(s => B.setkarten[s]), fortschritt)
-      : await bestimme(neuFoto, IDX, EINST.gemini, fortschritt);
+      : await bestimme(neuFoto, IDX, EINST.gemini, fortschritt, $("n-nummer").value.trim());
+    zeigeErkennung(ohneKI);
+  } catch (e) {
+    meldung.className = "meldung fehler";
+    meldung.textContent = FEHLERTEXT[e?.code] || "Die Karte konnte nicht erkannt werden. Bitte Set und Karte selbst auswählen.";
+    $("n-nurbild").hidden = !["kontingent", "zu_schnell", "ueberlastet", "leer", "fehler"].includes(e?.code);
+    $("n-formular").hidden = false; zeigeBesitz();
+  } finally { knopf.disabled = false; knopf.hidden = !kannErkennen() || modus === "pruefen"; }
+}
+// Ergebnis anzeigen (nach dem Foto oder nach „Mit Nummer suchen“)
+function zeigeErkennung(ohneKI = false) {
+  const meldung = $("n-meldung"); meldung.className = "meldung";
+  $("n-kandidaten").hidden = true;
+  {
     const r = erkennung.antwort;
     if (!erkennung.tipp.length) {
-      meldung.textContent = `Die Karte${r?.name ? " „" + r.name + "“" : ""} wurde nicht gefunden. Bitte Set und Karte selbst auswählen.`;
+      meldung.textContent = `Die Karte${r?.name ? " „" + r.name + "“" : ""} wurde nicht gefunden. Trag die Nummer ein oder wähle Set und Karte selbst.`;
       $("n-formular").hidden = false; zeigeBesitz(); return;
     }
     uebernimm(erkennung.tipp[0]);
@@ -481,13 +494,21 @@ async function erkenne({ ohneKI = false } = {}) {
       zeigeKandidaten();
       if (modus === "pruefen") $("n-korrigieren").hidden = false;
     }
-  } catch (e) {
-    meldung.className = "meldung fehler";
-    meldung.textContent = FEHLERTEXT[e?.code] || "Die Karte konnte nicht erkannt werden. Bitte Set und Karte selbst auswählen.";
-    $("n-nurbild").hidden = !["kontingent", "zu_schnell", "ueberlastet", "leer", "fehler"].includes(e?.code);
-    $("n-formular").hidden = false; zeigeBesitz();
-  } finally { knopf.disabled = false; knopf.hidden = !kannErkennen() || modus === "pruefen"; }
+  }
 }
+// Kartennummer eintippen: vor dem Foto als Hinweis für Gemini, danach zum sofortigen Neu-Zuordnen
+async function nummerSuchen() {
+  const nr = $("n-nummer").value.trim();
+  if (!nr || !IDX) return;
+  if (!erkennung && neuFoto && kannErkennen()) { erkenne(); return; }
+  $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Suche Karten mit dieser Nummer …";
+  erkennung = await neuZuordnen(erkennung, nr, IDX);
+  if (!erkennung.tipp.length) { $("n-meldung").textContent = `Keine Karte mit der Nummer ${nr} gefunden. Bitte so eingeben, wie sie auf der Karte steht, z. B. 046/086.`; return; }
+  if (!erkennung.antwort && erkennung.tipp.length > 1) erkennung.status = "pruefen";
+  zeigeErkennung();
+}
+$("n-nummer-suchen").addEventListener("click", nummerSuchen);
+$("n-nummer").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); nummerSuchen(); } });
 
 const neueId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 $("form-neu").addEventListener("submit", async ev => {
