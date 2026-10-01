@@ -1,6 +1,6 @@
 // Pokémon-Sammlung – eigenständige Web-App (ohne Claude).
 // Daten: privates GitHub-Repo (speicher.js). Erkennung: Gemini + Nachschlagewerk (erkennung.js).
-import { Index, bestimme, nurBild, neuZuordnen, haken, kanonisch, ERSTAUFLAGE_SETS } from "./erkennung.js";
+import { Index, bestimme, nurBild, neuZuordnen, nummerMitKuerzel, haken, kanonisch, ERSTAUFLAGE_SETS } from "./erkennung.js";
 import { GitHubSpeicher, TestSpeicher, PFADE } from "./speicher.js";
 
 // ---------- Grundlagen ----------
@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.14 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.15 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -291,6 +291,7 @@ document.addEventListener("click", e => {
 
 // ---------- Karte hinzufügen / prüfen ----------
 let neuFoto = null, anders = null, modus = "neu", erkennung = null;
+let setVonHand = null;   // von Hand gewähltes Set – „Mit Nummer suchen“ sucht dann nur dort
 const kannErkennen = () => !!EINST.gemini && !!IDX;
 // Keine Vorauswahl: gespeichert wird nur eine erkannte oder bewusst gewählte Karte
 function fuelleSets() {
@@ -342,8 +343,8 @@ function fuelleAndereKarten() {
 function andereKarteWeg() { anders = null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); }
 $("n-asuche-text").addEventListener("input", () => { if (anders) andereKarteWeg(); else fuelleAndereSets(); });
 $("n-asuche-text").addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });
-$("n-aset").addEventListener("change", () => { if (anders) andereKarteWeg(); else fuelleAndereKarten(); });
-$("n-akarte").addEventListener("change", () => { const id = $("n-akarte").value; if (id) uebernimm(id); else andereKarteWeg(); });
+$("n-aset").addEventListener("change", () => { setVonHand = $("n-aset").value || null; if (anders) andereKarteWeg(); else fuelleAndereKarten(); });
+$("n-akarte").addEventListener("change", () => { const id = $("n-akarte").value; if (id) uebernimm(id, true); else andereKarteWeg(); });
 function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr}/${s.offiziell}` : k.nr; }
 const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", IT: "Italienisch", ES: "Spanisch", PT: "Portugiesisch",
   NL: "Niederländisch", JP: "Japanisch", KO: "Koreanisch", ZH: "Chinesisch", andere: "andere Sprache" };
@@ -410,7 +411,11 @@ function setzeModus(m) {
   $("n-korrigieren").hidden = true;
 }
 $("n-korrigieren").addEventListener("click", () => { $("n-formular").hidden = false; $("n-korrigieren").hidden = true; if (erkennung?.tipp.length > 1) zeigeKandidaten(); });
-$("n-set").addEventListener("change", () => { anders = $("n-set").value === "anderes" ? anders : null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); });
+$("n-set").addEventListener("change", () => {
+  const set = $("n-set").value;
+  setVonHand = set && set !== "anderes" ? set : null;
+  anders = set === "anderes" ? anders : null; fuelleKarten(); zeigeBesitz(); markiereKandidat();
+});
 ["n-karte", "n-sprache", "n-auflage", "n-variante"].forEach(id => $(id).addEventListener("change", () => { zeigeBesitz(); markiereKandidat(); zeigeStempel(); }));
 $("n-wechsel").addEventListener("click", () => {
   setzeModus("neu"); $("n-datum").value = heute(); $("n-anzahl").value = 1; $("n-erkennen").hidden = true; $("n-formular").hidden = false;
@@ -419,7 +424,7 @@ function oeffneNeu(vor = {}) {
   const m = vor.modus || "neu";
   if (m === "neu" && !schreibbar) { toast("Zum Speichern bitte zuerst GitHub in den Einstellungen einrichten."); return; }
   fuelleSets();
-  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null;
+  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null; setVonHand = null;
   $("n-vorschau").innerHTML = `<div class="leerbild"></div>`;
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.";
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
@@ -487,8 +492,9 @@ function stempelUrl() {
 }
 
 // Treffer übernehmen: Karte aus den eigenen Sets oder aus einem anderen Set
-function uebernimm(id) {
+function uebernimm(id, vonHand = false) {
   const k = IDX.karte(kanonisch(id)); if (!k) return;
+  if (!vonHand) setVonHand = null;   // Set kam aus der Erkennung, nicht vom Besitzer
   const nr = /^\d+$/.test(k.nr) ? Number(k.nr) : null;
   if (B.setkarten[k.set] && nr != null && setInfo(k.set, nr)) { anders = null; $("n-set").value = k.set; fuelleKarten(nr); }
   else {
@@ -569,14 +575,22 @@ function zeigeErkennung(ohneKI = false) {
 }
 // Kartennummer eintippen: vor dem Foto als Hinweis für Gemini, danach zum sofortigen Neu-Zuordnen
 async function nummerSuchen() {
-  const nr = $("n-nummer").value.trim();
-  if (!nr || !IDX) return;
-  if (!erkennung && neuFoto && kannErkennen()) { erkenne(); return; }
-  $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Suche Karten mit dieser Nummer …";
-  erkennung = await neuZuordnen(erkennung, nr, IDX);
-  if (!erkennung.tipp.length) { $("n-meldung").textContent = `Keine Karte mit der Nummer ${nr} gefunden. Bitte so eingeben, wie sie auf der Karte steht, z. B. 046/086.`; return; }
+  const eingabe = $("n-nummer").value.trim();
+  if (!eingabe || !IDX) return;
+  // „MEE 007“: Kürzel bestimmt das Set; sonst ein von Hand gewähltes Set
+  const h = nummerMitKuerzel(eingabe, IDX), nurSets = h.sets || (setVonHand ? [setVonHand] : null);
+  if (!nurSets && !erkennung && neuFoto && kannErkennen()) { erkenne(); return; }
+  const wo = nurSets ? ` in ${nurSets.map(setName).join(" / ")}` : "";
+  $("n-meldung").className = "meldung"; $("n-meldung").textContent = `Suche Karten mit dieser Nummer${wo} …`;
+  let neu = await neuZuordnen(erkennung, h.nummer, IDX, nurSets);
+  if (!neu.tipp.length && nurSets) neu = await neuZuordnen(erkennung, eingabe, IDX);   // im Set nichts: überall suchen
+  if (!neu.tipp.length) { $("n-meldung").textContent = `Keine Karte mit der Nummer ${eingabe}${wo} gefunden. Bitte so eingeben, wie sie auf der Karte steht, z. B. 046/086 oder MEE 007.`; return; }
+  erkennung = neu;
+  const gemerkt = setVonHand;
   if (!erkennung.antwort && erkennung.tipp.length > 1) erkennung.status = "pruefen";
   zeigeErkennung();
+  setVonHand = gemerkt;   // weitere Suche bleibt im gewählten Set
+  if (h.sprache && SPRACHE[h.sprache]) { $("n-sprache").value = h.sprache; zeigeBesitz(); }   // „MEE FR 007“
 }
 $("n-nummer-suchen").addEventListener("click", nummerSuchen);
 $("n-nummer").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); nummerSuchen(); } });

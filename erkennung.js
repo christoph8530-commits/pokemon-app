@@ -73,6 +73,7 @@ export class Index {
           bild: bild === 1 ? `${BILDER}${this.sets[sid].pfad}/${nr}` : bild ? BILDER + bild : null,
           nen: norm(en), nde: norm(de || en), nw: weitere ? weitere.split("|").map(norm) : [] });
     this.nachId = new Map(this.karten.map(k => [k.id, k]));
+    this.nrPraefixe = new Set(this.karten.map(k => (k.nr.match(/^[A-Za-z]+/) || [""])[0].toUpperCase()));   // TG, SWSH, XY …
   }
   karte(id) { return this.nachId.get(id); }
 }
@@ -127,11 +128,27 @@ export function nummerInfo(nummer = "") {
   };
   return { nrG, totG, nrPasst };
 }
+// Eingetipptes Set-Kürzel vor der Nummer: „MEE 007“, „CRI FR 046/086“, „MEE007“.
+// Ohne Leerzeichen nur, wenn die Buchstaben nicht auch Teil von Kartennummern sind (XY01, SV001, TG05 …).
+export function nummerMitKuerzel(eingabe, index) {
+  const text = String(eingabe || "").trim(), nichts = { nummer: text, kuerzel: null, sets: null, sprache: null };
+  let m = text.match(/^([A-Za-z][A-Za-z0-9]{1,4})[\s\-]+(?:([A-Za-z]{2})[\s\-]+)?(\d\S*)$/);
+  if (!m) {
+    const o = text.match(/^([A-Za-z]{3,5})(\d\S*)$/);
+    if (o && !index.nrPraefixe.has(o[1].toUpperCase())) m = [o[0], o[1], null, o[2]];
+  }
+  if (!m) return nichts;
+  const kuerzel = m[1].toUpperCase();
+  const sets = Object.values(index.sets).filter(s => s.kuerzel === kuerzel).map(s => s.id);
+  return sets.length ? { nummer: m[3].trim(), kuerzel, sets, sprache: m[2] ? m[2].toUpperCase() : null } : nichts;
+}
 // alle Karten mit dieser Nummer (und Gesamtzahl) – wenn kein Name bekannt ist
 export function nachNummer(nummer, index) {
-  const { totG, nrPasst } = nummerInfo(nummer);
+  const { totG, nrPasst } = nummerInfo(nummer), roh = nummer.toUpperCase().replace(/\s/g, "").split("/")[0];
   return index.karten.filter(k => nrPasst(k.nr) && (totG == null || totG === index.sets[k.set].offiziell || totG === index.sets[k.set].gesamt))
-    .map(k => ({ p: 3.8, id: k.id, passt: true, passtVoll: totG != null, bild: 0, hatBild: !!k.bild }));
+    .map(k => ({ p: 3.8 + (/^[A-Z]/.test(roh) && k.nr.toUpperCase() === roh ? 0.5 : 0),   // TG05: Karte „TG05“ vor Karte „5“
+                 id: k.id, passt: true, passtVoll: totG != null, bild: 0, hatBild: !!k.bild }))
+    .sort((x, y) => y.p - x.p);
 }
 
 // Energiekarten heißen je nach Druck „Basic Darkness Energy“ oder nur „Darkness Energy“ – für den Vergleich gleich
@@ -329,7 +346,11 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}, 
   const frage = haken.gemini || gemini;
   const antwort = await frage(schluessel, [klein, stempel, nummer,
     { text: PROMPT + (hinweis ? `\nHinweis vom Besitzer: Die Kartennummer lautet ${hinweis}.` : "") }], SCHEMA);
-  if (hinweis) antwort.nummer = hinweis;
+  if (hinweis) {
+    const h = nummerMitKuerzel(hinweis, index);
+    antwort.nummer = h.nummer;
+    if (h.kuerzel) antwort.set_kuerzel = h.kuerzel;
+  }
   const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }), zugeschnitten: gefunden, q: merkmal(bild) };
   let anfragen = 1 + (ueberGemini ? 1 : 0);
   const kand = kandidaten(antwort, index);
@@ -401,14 +422,17 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}, 
 
 // ---------- Mit eingetippter Nummer neu zuordnen (ohne neue Anfrage an Gemini) ----------
 // alt: bisheriges Ergebnis (Gemini-Antwort und Bild-Fingerabdruck), darf leer sein
-export async function neuZuordnen(alt, nummer, index) {
+// nurSets: nur in diesen Sets suchen (eingetipptes Kürzel oder von Hand gewähltes Set)
+export async function neuZuordnen(alt, nummer, index, nurSets = null) {
   const r = alt?.antwort ? { ...alt.antwort, nummer } : null;
-  let kand = r ? kandidaten(r, index) : [];
+  const imSet = k => !nurSets || nurSets.includes(index.karte(k.id)?.set);
+  let kand = r ? kandidaten(r, index).filter(imSet) : [];
   if (!kand.some(k => k.passt)) {                       // Name passt zu keiner Karte mit dieser Nummer: nur nach Nummer
     const da = new Set(kand.map(k => k.id));
-    kand = kand.concat(nachNummer(nummer, index).filter(k => !da.has(k.id)));
+    kand = kand.concat(nachNummer(nummer, index).filter(k => !da.has(k.id) && imSet(k)));
   }
   kand = ohneDoppelte(kand);
+  if (nurSets && kand.length === 1) kand[0].passtVoll = true;   // Set und Nummer stimmen: eindeutig
   if (alt?.q) await Promise.all(kand.slice(0, 40).map(async k => {
     const ref = await refBild(index.karte(k.id));
     k.bild = ref ? skalar(merkmal(ref), alt.q) : 0;
