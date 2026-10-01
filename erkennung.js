@@ -7,17 +7,17 @@ export const haken = { gemini: null };              // zum Testen: Gemini-Aufruf
 const BILDER = "https://assets.tcgdex.net/";
 
 export const PROMPT = `Du siehst drei Bilder: Bild 1 ist ein Foto einer Pokémon-Sammelkarte, Bild 2 ist ein vergrößerter Ausschnitt
-der Stelle links unter dem Kartenbild, wo bei Erstauflagen ein Stempel sitzt, Bild 3 ist die untere rechte Ecke
-mit Kartennummer (und bei manchen Karten dem Set-Symbol) vergrößert.
+der Stelle links unter dem Kartenbild, wo bei Erstauflagen ein Stempel sitzt, Bild 3 ist der untere Kartenrand
+vergrößert, dort steht die Kartennummer (bei älteren Karten rechts, bei neueren links mit Set-Kürzel).
 Bestimme die Karte genau:
 - name: Kartenname wie aufgedruckt
 - name_en: englischer Name der Karte
-- set: englischer Name des Sets, erkennbar am Set-Symbol rechts unter dem Bild (z. B. "Base Set", "Jungle", "Fossil",
+- set: englischer Name des Sets, erkennbar am Set-Symbol rechts unter dem Bild bzw. bei neueren Karten am Set-Kürzel links unten (z. B. "Base Set", "Jungle", "Fossil",
   "Team Rocket", "Gym Heroes", "Gym Challenge", "Neo Genesis"). Ein schwarzer Stern mit Nummer als Symbol bedeutet
   "Wizards Black Star Promos". Hat die Karte kein Set-Symbol, gib "Base Set" an.
-- nummer: die aufgedruckte Kartennummer unten rechts genau wie gedruckt, z. B. "35/102". Bei Promokarten steht nur eine
+- nummer: die aufgedruckte Kartennummer genau wie gedruckt, z. B. "35/102", "008/088" oder "TG05/TG30" (bei neueren Karten links unten nach dem Set-Kürzel, das Kürzel selbst nicht mit angeben). Bei Promokarten steht nur eine
   Zahl (oft im schwarzen Stern oder als "Nr. 5"), dann nur diese Zahl. Lies die Ziffern sorgfältig einzeln, am besten in Bild 3.
-- sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, NL, JP oder andere (Energiekarten: „ENERGY“ = EN, „ENERGIE“ = DE)
+- sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, PT, NL, JP, KO, ZH oder andere (Energiekarten: „ENERGY“ = EN, „ENERGIE“ = DE)
 - erste_auflage: nur true, wenn in Bild 2 deutlich ein Stempel "Edition 1" bzw. "1st Edition" (schwarzer Kreis/Rahmen
   mit einer 1) zu erkennen ist. Ein Schatten, Holo-Glanz oder Text ist kein Stempel.
 - holo: true, wenn das Kartenbild glitzert (Holo)
@@ -49,7 +49,7 @@ function ohneDoppelte(liste) {
 
 const ART = [0.10, 0.11, 0.90, 0.47];      // Kartenbild einer Wizards-Karte (Anteile)
 const STEMPEL = [0.0, 0.40, 0.40, 0.62];   // Stelle des Erstauflage-Stempels
-const NUMMER = [0.45, 0.88, 1.0, 1.0];     // untere rechte Ecke mit der Kartennummer
+const NUMMER = [0.0, 0.88, 1.0, 1.0];      // unterer Kartenrand mit der Kartennummer (alt: rechts, neu: links)
 
 // ---------- Nachschlagewerk ----------
 export class Index {
@@ -60,10 +60,10 @@ export class Index {
       this.sets[id] = { id, name, name_de, serie, offiziell, gesamt, pfad };
     this.karten = [];
     for (const [sid, liste] of Object.entries(daten.karten))
-      for (const [nr, en, de, bild] of liste)
+      for (const [nr, en, de, bild, weitere] of liste)
         this.karten.push({ id: `${sid}-${nr}`, set: sid, nr, en, de: de || en,
           bild: bild === 1 ? `${BILDER}${this.sets[sid].pfad}/${nr}` : bild ? BILDER + bild : null,
-          nen: norm(en), nde: norm(de || en) });
+          nen: norm(en), nde: norm(de || en), nw: weitere ? weitere.split("|").map(norm) : [] });
     this.nachId = new Map(this.karten.map(k => [k.id, k]));
   }
   karte(id) { return this.nachId.get(id); }
@@ -111,20 +111,30 @@ export function kandidaten(r, index) {
   const nrG = m ? m[1].replace(/^0+/, "") : nur ? nur[1].replace(/^0+/, "") : null;
   const totG = m ? Number(m[2]) : null;
   const nEn = norm(r.name_en), nName = norm(r.name), nSet = norm(r.set);
+  // Nummern mit Buchstaben (TG05, SWSH123, H06); ein mitgelesenes Set-Kürzel (SVI025) stört nicht
+  const roh = nummer.toUpperCase().replace(/\s/g, "").split("/")[0], mt = roh.match(/^([A-Z]*)(\d+)$/);
+  const nrPasst = nr => {
+    const n = nr.toUpperCase();
+    if (!mt) return !!roh && n === roh;
+    const mk = n.match(/^([A-Z]*)(\d+)$/);
+    return mk ? Number(mk[2]) === Number(mt[2]) && (mk[1] === mt[1] || mk[1] === "") : n === roh;
+  };
   const setAehnlich = {};
   const liste = [];
   for (const k of index.karten) {
-    const name = Math.max(aehnlich(nEn, k.nen, true), aehnlich(nName, k.nde, true), aehnlich(nName, k.nen, true));
+    let name = Math.max(aehnlich(nEn, k.nen, true), aehnlich(nName, k.nde, true), aehnlich(nName, k.nen, true));
+    for (const w of k.nw) if (name < 1) name = Math.max(name, aehnlich(nName, w, true));   // französische usw. Namen
     if (name < 0.85) continue;
     const s = index.sets[k.set];
     let p = 2 * name;
-    const nrOk = !!nrG && k.nr.replace(/^0+/, "") === nrG;
+    const nrOk = nrPasst(k.nr);
     if (nrOk) p += 1.0;
     else if (nrG && /^\d+$/.test(k.nr) && Math.abs(Number(k.nr) - Number(nrG)) <= 9) p += 0.3;
     const totOk = totG == null || totG === s.offiziell || totG === s.gesamt;
     if (totG && totOk) p += 0.8;
     p += 0.6 * (setAehnlich[k.set] ??= aehnlich(nSet, norm(s.name), true));
-    liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95, bild: 0 });
+    // passtVoll: Nummer UND Gesamtzahl stimmen (z. B. 130/132) – dann hat das gegen das Bild Vorrang
+    liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95, passtVoll: nrOk && totG != null && totOk && name >= 0.95, bild: 0, hatBild: !!k.bild });
   }
   liste.sort((a, b) => b.p - a.p);
   return ohneDoppelte(liste).slice(0, 8);
@@ -132,7 +142,8 @@ export function kandidaten(r, index) {
 // Karten mit (fast) gleichem Namen – für den Fall, dass die Nummer ganz falsch gelesen wurde
 function gleichnamige(r, index) {
   const nEn = norm(r.name_en), nName = norm(r.name);
-  return index.karten.filter(k => k.bild && Math.max(aehnlich(nEn, k.nen, true), aehnlich(nName, k.nde, true)) >= 0.95);
+  return index.karten.filter(k => k.bild && Math.max(aehnlich(nEn, k.nen, true), aehnlich(nName, k.nde, true),
+    ...k.nw.map(w => aehnlich(nName, w, true))) >= 0.95);
 }
 
 // ---------- Bilder ----------
@@ -147,17 +158,30 @@ function ausschnitt(bild, [x0, y0, x1, y1], breite, hoehe) {
 }
 // Karte im Foto finden: gelber Rand, über Zeilen/Spalten mit gelben Pixeln (längster Bereich).
 // Ergebnis: Anteile [x0, y0, x1, y1] oder null, wenn kein Kartenrand gefunden wurde.
+// Gelb: Wizards- und ältere Karten. Silber (ab 2023): hell, wenig Farbe, eher bläulich als bräunlich.
+const GELB = (r, gr, b, mx, d) => {
+  let ton = mx === r ? ((gr - b) / d) % 6 : mx === gr ? (b - r) / d + 2 : (r - gr) / d + 4;
+  ton = (ton < 0 ? ton + 6 : ton) * 60;
+  return ton >= 38 && ton <= 68 && d / (mx + 1e-6) > 0.42 && mx > 0.45;
+};
+const SILBER = (r, gr, b, mx, d) => mx > 0.62 && d / (mx + 1e-6) < 0.3 && b >= r + 0.02;
 export function findeKarte(bild) {
   const w = 300, h = Math.max(1, Math.round(bild.height * w / bild.width));
   const c = new OffscreenCanvas(w, h), g = c.getContext("2d");
   g.drawImage(bild, 0, 0, w, h);
-  const px = g.getImageData(0, 0, w, h).data, zeilen = new Float32Array(h), spalten = new Float32Array(w);
+  const px = g.getImageData(0, 0, w, h).data;
+  for (const rand of [GELB, SILBER]) {
+    const box = rahmen(px, w, h, rand, bild);
+    if (box) return box;
+  }
+  return null;
+}
+function rahmen(px, w, h, rand, bild) {
+  const zeilen = new Float32Array(h), spalten = new Float32Array(w);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = (y * w + x) * 4, r = px[i] / 255, gr = px[i + 1] / 255, b = px[i + 2] / 255;
     const mx = Math.max(r, gr, b), d = mx - Math.min(r, gr, b) + 1e-6;
-    let ton = mx === r ? ((gr - b) / d) % 6 : mx === gr ? (b - r) / d + 2 : (r - gr) / d + 4;
-    ton = (ton < 0 ? ton + 6 : ton) * 60;
-    if (ton >= 38 && ton <= 68 && d / (mx + 1e-6) > 0.42 && mx > 0.45) { zeilen[y]++; spalten[x]++; }
+    if (rand(r, gr, b, mx, d)) { zeilen[y]++; spalten[x]++; }
   }
   const lauf = (werte, anzahl, grenze) => {
     let best = null, start = null, ende = 0, luecke = 0;
@@ -175,12 +199,22 @@ export function findeKarte(bild) {
   return [rx[0] / w, ry[0] / h, rx[1] / w, ry[1] / h];
 }
 // Foto auf die Karte zuschneiden (unverändert, wenn keine Karte gefunden wurde)
-export async function karteImFoto(foto) {
+const BOX_SCHEMA = { type: "OBJECT", properties: { box_2d: { type: "ARRAY", items: { type: "INTEGER" } } }, required: ["box_2d"] };
+async function boxVonGemini(bild, schluessel) {
+  const f = Math.min(1, 768 / Math.max(bild.width, bild.height));
+  const r = await (haken.gemini || gemini)(schluessel, [await alsJpeg(bild, Math.round(bild.width * f), Math.round(bild.height * f)),
+    { text: "Wo ist die Pokémon-Karte in diesem Foto? Gib ihren Rand als box_2d [ymin, xmin, ymax, xmax] im Bereich 0–1000 an." }], BOX_SCHEMA);
+  const [y0, x0, y1, x1] = r?.box_2d || [];
+  return x0 >= 0 && x1 > x0 && x1 <= 1000 && y0 >= 0 && y1 > y0 && y1 <= 1000 ? [x0 / 1000, y0 / 1000, x1 / 1000, y1 / 1000] : null;
+}
+// schluessel nur nötig, wenn kein Kartenrand gefunden wird (dann fragt die App Gemini nach der Lage der Karte)
+export async function karteImFoto(foto, schluessel = null) {
   const bild = await bitmap(foto);
-  const box = findeKarte(bild);
-  if (!box) return { bild, gefunden: false };
+  let box = findeKarte(bild), ueberGemini = false;
+  if (!box && schluessel) { box = await boxVonGemini(bild, schluessel).catch(e => { if (e.code === "kontingent") throw e; return null; }); ueberGemini = !!box; }
+  if (!box) return { bild, gefunden: false, ueberGemini };
   const b = Math.round((box[2] - box[0]) * bild.width), h = Math.round((box[3] - box[1]) * bild.height);
-  return { bild: ausschnitt(bild, box, b, h), gefunden: true };
+  return { bild: ausschnitt(bild, box, b, h), gefunden: true, ueberGemini };
 }
 function vergroessert(bild, bereich, maxKante = 1200, maxFaktor = 3) {
   const b = (bereich[2] - bereich[0]) * bild.width, h = (bereich[3] - bereich[1]) * bild.height;
@@ -251,7 +285,8 @@ export async function gemini(schluessel, teile, schema, modell = MODELL) {
 // ---------- Ganze Erkennung ----------
 // foto: Blob/File vom Handy. Ergebnis: {antwort, tipp: [ids], status: "ok"|"pruefen", bildaehnlich, anfragen}
 export async function bestimme(foto, index, schluessel, fortschritt = () => {}) {
-  const { bild, gefunden } = await karteImFoto(foto);
+  fortschritt("Suche die Karte im Foto …");
+  const { bild, gefunden, ueberGemini } = await karteImFoto(foto, schluessel);
   const skala = Math.min(1, 1024 / Math.max(bild.width, bild.height));
   const klein = await alsJpeg(bild, Math.round(bild.width * skala), Math.round(bild.height * skala));
   const stempelBild = vergroessert(bild, STEMPEL, 800, 2);
@@ -261,7 +296,7 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
   const frage = haken.gemini || gemini;
   const antwort = await frage(schluessel, [klein, stempel, nummer, { text: PROMPT }], SCHEMA);
   const extra = { stempel: await stempelBild.convertToBlob({ type: "image/jpeg", quality: 0.85 }), zugeschnitten: gefunden };
-  let anfragen = 1;
+  let anfragen = 1 + (ueberGemini ? 1 : 0);
   const kand = kandidaten(antwort, index);
   if (!kand.length) return { antwort, tipp: [], status: "pruefen", bildaehnlich: [], anfragen, ...extra };
 
@@ -275,7 +310,7 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
   kand.sort((a, b) => b.p - a.p);
 
   // Bild passt gar nicht: alle gleichnamigen Karten nach Bildähnlichkeit ordnen
-  if (kand[0].bild < 0.2) {
+  if (kand[0].bild < 0.2 && kand[0].hatBild && !kand[0].passtVoll) {
     fortschritt("Suche nach dem passenden Bild …");
     const alle = await Promise.all(gleichnamige(antwort, index).map(async k => {
       const ref = await refBild(k);
@@ -289,7 +324,8 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}) 
 
   let status = "ok";
   const knapp = kand.length > 1 && kand[0].p - kand[1].p < 0.5;
-  if (!kand[0].passt || knapp) {
+  if (!kand[0].hatBild) status = kand[0].passt ? "ok" : "pruefen";     // kein Vergleichsbild: Rückfrage würde die Karte aussortieren
+  else if (!kand[0].passt || knapp) {
     const auswahl = [];
     for (const k of kand.slice(0, 3)) { const ref = await refBild(index.karte(k.id)); if (ref) auswahl.push([k, ref]); }
     if (auswahl.length >= 2) {

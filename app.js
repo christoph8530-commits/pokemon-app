@@ -297,7 +297,8 @@ function fuelleKarten(nr) {
   if (nr != null) $("n-karte").value = String(nr);
 }
 function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr}/${s.offiziell}` : k.nr; }
-const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", JP: "Japanisch", andere: "andere Sprache" };
+const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", IT: "Italienisch", ES: "Spanisch", PT: "Portugiesisch",
+  NL: "Niederländisch", JP: "Japanisch", KO: "Koreanisch", ZH: "Chinesisch", andere: "andere Sprache" };
 // gewählte Karte als {set, nr, name, nummer, id, preis, bild}
 function gewaehlt() {
   const set = $("n-set").value;
@@ -465,7 +466,7 @@ async function erkenne({ ohneKI = false } = {}) {
     }
     uebernimm(erkennung.tipp[0]);
     if (r) {
-      $("n-sprache").value = ["DE", "EN", "FR", "JP"].includes(r.sprache) ? r.sprache : "andere";
+      $("n-sprache").value = SPRACHE[r.sprache] && r.sprache !== "andere" ? r.sprache : "andere";
       $("n-auflage").value = r.erste_auflage ? "1. Auflage" : "normal";
     }
     zeigeBesitz(); zeigeStempel();
@@ -650,6 +651,21 @@ function starteAnzeige() {
   $("fab-pruefen").hidden = false;
   alles();
 }
+// Neue Sets: Die Montags-Automatik aktualisiert das Kartenverzeichnis im privaten Repo. Die App schaut
+// höchstens einmal am Tag nach, ob es dort ein neueres gibt, und merkt es sich auf dem Gerät.
+const VERZEICHNIS = "webapp/daten/karten-index.json";
+async function neuesVerzeichnis() {
+  if (!speicher || TEST || !schreibbar && !EINST.token || lies("verzeichnis-geprueft") === heute()) return;
+  try {
+    const d = await speicher.lesen(VERZEICHNIS, { gross: true });
+    merke("verzeichnis-geprueft", heute());
+    if (d?.stand && (!IDX || d.stand > IDX.stand)) {
+      IDX = new Index(d); alles();
+      try { localStorage.setItem("verzeichnis", JSON.stringify(d)); } catch (e) {}
+    }
+  } catch (e) {}
+}
+
 // beim Zurückkehren in die App frische Daten holen (z. B. nach Änderungen am PC)
 let zuletzt = Date.now();
 document.addEventListener("visibilitychange", async () => {
@@ -664,9 +680,14 @@ async function start() {
     window.testSpeicher = speicher; window.testHaken = haken;   // für Tests am PC
     EINST.gemini = EINST.gemini || "test";
   }
-  fetch("daten/karten-index.json").then(r => r.json()).then(d => { IDX = new Index(d); alles(); })
-    .catch(() => { status("Das Kartenverzeichnis konnte nicht geladen werden. Erkennung ist aus.", "warn"); });
+  // Kartenverzeichnis: mitgeliefert, oder eine neuere Fassung, die die App schon einmal aus dem Repo geholt hat
+  await fetch("daten/karten-index.json").then(r => r.json()).then(d => {
+    let gemerkt = null;
+    try { gemerkt = JSON.parse(localStorage.getItem("verzeichnis") || "null"); } catch (e) {}
+    IDX = new Index(gemerkt && gemerkt.stand > d.stand ? gemerkt : d); alles();
+  }).catch(() => { status("Das Kartenverzeichnis konnte nicht geladen werden. Erkennung ist aus.", "warn"); });
   await verbinde();
+  neuesVerzeichnis();
   if (TEST) status("Testmodus: Daten vom PC, Änderungen nur im Arbeitsspeicher.", "ok");
   if ("serviceWorker" in navigator && !TEST) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
