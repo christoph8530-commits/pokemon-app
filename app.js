@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.13 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.14 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -299,8 +299,10 @@ function fuelleSets() {
 function fuelleKarten(nr) {
   const set = $("n-set").value, frei = set === "anderes";
   $("n-karte").closest("label").hidden = frei || !set; $("n-frei").hidden = !frei || !!anders; $("n-anders").hidden = !frei || !anders;
+  for (const id of ["n-asuche", "n-aset-feld", "n-akarte-feld"]) $(id).hidden = !frei || !IDX;
   if (!set) { $("n-karte").innerHTML = ""; return; }
   if (frei) {
+    if (IDX) fuelleAndereSets();
     if (anders) $("n-anders").innerHTML = `<div class="besitz zeile" style="border:0;padding:0;background:none"><div class="zeile">${bildHtml(anders.bild ? anders.bild + "/low.jpg" : null)}
       <div><strong>${esc(anders.de)}</strong><div class="muted" style="font-size:0.88rem">${esc(setName(anders.set))} · <span class="mono">${esc(nummerVon(anders))}</span></div></div></div></div>`;
     return;
@@ -308,6 +310,40 @@ function fuelleKarten(nr) {
   $("n-karte").innerHTML = `<option value="">– Karte wählen –</option>` + B.setkarten[set].map(k => `<option value="${k.nr}">${k.nr} · ${esc(k.name)}${k.holo ? " (Holo)" : ""}</option>`).join("");
   $("n-karte").value = nr != null ? String(nr) : "";
 }
+// Anderes Set: alle Sets aus dem Kartenverzeichnis, mit Suche nach Name, deutschem Name oder Kürzel
+let verzeichnis = null;   // Set-ID → Karten, einmal je Kartenverzeichnis
+function kartenJeSet() {
+  if (verzeichnis?.idx !== IDX) {
+    verzeichnis = { idx: IDX, sets: {} };
+    for (const k of IDX.karten) (verzeichnis.sets[k.set] ??= []).push(k);
+  }
+  return verzeichnis.sets;
+}
+const suchtext = s => String(s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function fuelleAndereSets() {
+  const woerter = suchtext($("n-asuche-text").value).split(/\s+/).filter(Boolean), wahl = anders?.set || $("n-aset").value;
+  const sets = Object.values(IDX.sets).filter(s => kartenJeSet()[s.id]).reverse()   // neueste zuerst
+    .filter(s => woerter.every(w => suchtext(`${s.name} ${s.name_de} ${s.kuerzel} ${s.id} ${s.serie}`).includes(w)));
+  const gruppen = new Map();
+  for (const s of sets) { if (!gruppen.has(s.serie)) gruppen.set(s.serie, []); gruppen.get(s.serie).push(s); }
+  $("n-aset").innerHTML = `<option value="">${sets.length ? `– Set wählen (${sets.length}) –` : "– kein Set gefunden –"}</option>` +
+    [...gruppen].map(([serie, l]) => `<optgroup label="${esc(serie || "Sonstige")}">` +
+      l.map(s => `<option value="${s.id}">${esc(s.name_de || s.name)}${s.kuerzel ? " · " + esc(s.kuerzel) : ""}</option>`).join("") + "</optgroup>").join("");
+  const genau = sets.filter(s => woerter.length === 1 && suchtext(s.kuerzel) === woerter[0]);   // „MEE“ = genau dieses Kürzel
+  $("n-aset").value = sets.some(s => s.id === wahl) ? wahl : sets.length === 1 ? sets[0].id : genau.length === 1 ? genau[0].id : "";
+  fuelleAndereKarten();
+}
+function fuelleAndereKarten() {
+  const sid = $("n-aset").value, l = sid ? kartenJeSet()[sid] || [] : [];
+  $("n-akarte").innerHTML = `<option value="">${sid ? "– Karte wählen –" : "– zuerst Set wählen –"}</option>` +
+    l.map(k => `<option value="${k.id}">${esc(k.nr)} · ${esc(k.de)}</option>`).join("");
+  $("n-akarte").value = anders?.set === sid ? anders.id : "";
+}
+function andereKarteWeg() { anders = null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); }
+$("n-asuche-text").addEventListener("input", () => { if (anders) andereKarteWeg(); else fuelleAndereSets(); });
+$("n-asuche-text").addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });
+$("n-aset").addEventListener("change", () => { if (anders) andereKarteWeg(); else fuelleAndereKarten(); });
+$("n-akarte").addEventListener("change", () => { const id = $("n-akarte").value; if (id) uebernimm(id); else andereKarteWeg(); });
 function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr}/${s.offiziell}` : k.nr; }
 const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", IT: "Italienisch", ES: "Spanisch", PT: "Portugiesisch",
   NL: "Niederländisch", JP: "Japanisch", KO: "Koreanisch", ZH: "Chinesisch", andere: "andere Sprache" };

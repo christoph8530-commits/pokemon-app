@@ -254,8 +254,11 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     <div class="formular" id="n-formular">
       <label>Set<select id="n-set"></select></label>
       <label>Karte<select id="n-karte"></select></label>
+      <label id="n-asuche" hidden>Set suchen<input id="n-asuche-text" type="search" autocomplete="off" spellcheck="false" placeholder="z. B. Chaos oder MEE"></label>
+      <label id="n-aset-feld" hidden>Set (alle Sets)<select id="n-aset"></select></label>
+      <label id="n-akarte-feld" hidden>Karte<select id="n-akarte"></select></label>
       <div class="breit erkannt" id="n-anders" hidden></div>
-      <label class="breit" id="n-frei" hidden>Name, Set und Nummer<input id="n-freitext" type="text" placeholder="z. B. Pikachu, Base Set 2, 87/130"></label>
+      <label class="breit" id="n-frei" hidden>Nicht im Verzeichnis? Name, Set und Nummer frei eintragen<input id="n-freitext" type="text" placeholder="z. B. Pikachu, Base Set 2, 87/130"></label>
       <label>Sprache<select id="n-sprache"><option value="DE">Deutsch</option><option value="EN">Englisch</option><option value="FR">Französisch</option><option value="IT">Italienisch</option><option value="ES">Spanisch</option><option value="PT">Portugiesisch</option><option value="NL">Niederländisch</option><option value="JP">Japanisch</option><option value="KO">Koreanisch</option><option value="ZH">Chinesisch</option><option value="andere">Andere</option></select></label>
       <label>Auflage<select id="n-auflage"><option value="normal">Normal</option><option value="1. Auflage">1. Auflage</option></select></label>
       <label>Variante<select id="n-variante"><option value="normal">Standard (wie gedruckt)</option><option value="reverse">Reverse Holo</option><option value="pokeball">Pokéball-Muster</option><option value="meisterball">Meisterball-Muster</option></select></label>
