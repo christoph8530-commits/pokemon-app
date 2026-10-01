@@ -297,7 +297,7 @@ function fuelleKarten(nr) {
   if (nr != null) $("n-karte").value = String(nr);
 }
 function nummerVon(k) { const s = IDX.sets[k.set]; return s?.offiziell ? `${k.nr}/${s.offiziell}` : k.nr; }
-const SPRACHE = { DE: "Deutsch", EN: "Englisch", JP: "Japanisch", andere: "andere Sprache" };
+const SPRACHE = { DE: "Deutsch", EN: "Englisch", FR: "Französisch", JP: "Japanisch", andere: "andere Sprache" };
 // gewählte Karte als {set, nr, name, nummer, id, preis, bild}
 function gewaehlt() {
   const set = $("n-set").value;
@@ -465,7 +465,7 @@ async function erkenne({ ohneKI = false } = {}) {
     }
     uebernimm(erkennung.tipp[0]);
     if (r) {
-      $("n-sprache").value = ["DE", "EN", "JP"].includes(r.sprache) ? r.sprache : "andere";
+      $("n-sprache").value = ["DE", "EN", "FR", "JP"].includes(r.sprache) ? r.sprache : "andere";
       $("n-auflage").value = r.erste_auflage ? "1. Auflage" : "normal";
     }
     zeigeBesitz(); zeigeStempel();
