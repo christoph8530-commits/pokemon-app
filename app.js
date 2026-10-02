@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.15 (01.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.16 (02.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -406,7 +406,7 @@ function setzeModus(m) {
   $("n-speichern").hidden = m === "pruefen";
   $("n-wechsel").hidden = !(m === "pruefen" && schreibbar);
   $("n-naechste").hidden = !(m === "pruefen");
-  $("n-foto-knopf").hidden = false;
+  $("n-foto-knopf").hidden = false; $("n-galerie-knopf").hidden = false;
   $("n-formular").hidden = m === "pruefen" && kannErkennen();   // beim Scannen keine Auswahlfelder
   $("n-korrigieren").hidden = true;
 }
@@ -458,15 +458,19 @@ async function verkleinere(datei, max = 1600) {
   c.getContext("2d").drawImage(bild, 0, 0, c.width, c.height);
   return await new Promise(r => c.toBlob(b => r(b || datei), "image/jpeg", 0.85));
 }
-$("n-foto").addEventListener("change", async e => {
+// Foto von der Kamera oder ein Bild aus der Galerie – danach gleicher Ablauf
+async function fotoGewaehlt(e) {
   const datei = e.target.files && e.target.files[0]; if (!datei) return;
+  e.target.value = "";   // dasselbe Bild darf nochmal gewählt werden
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Foto wird vorbereitet …";
   neuFoto = await verkleinere(datei);
   $("n-vorschau").innerHTML = `<img src="${URL.createObjectURL(neuFoto)}" alt="Dein Foto">`;
   $("n-erkennen").hidden = !kannErkennen();
   $("n-meldung").textContent = kannErkennen() ? "Tippe auf „Karte erkennen“ oder wähle Set und Karte selbst." : "Wähle jetzt Set und Karte aus.";
   if (kannErkennen()) erkenne();
-});
+}
+$("n-foto").addEventListener("change", fotoGewaehlt);
+$("n-galerie").addEventListener("change", fotoGewaehlt);
 $("n-erkennen").addEventListener("click", () => erkenne());
 $("n-nurbild").addEventListener("click", () => erkenne({ ohneKI: true }));
 
