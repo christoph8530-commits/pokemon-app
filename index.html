@@ -166,6 +166,7 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .neu-oben { position: sticky; top: 0; z-index: 5; display: grid; gap: 10px; margin: -18px -18px 0; padding: 18px 18px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .neu-oben .dlg-fuss { align-items: center; }
 .neu-oben .meldung:empty { display: none; }
+.setkarte .sprachen { grid-column: 1 / 3; display: flex; gap: 4px; flex-wrap: wrap; }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
 </head>
@@ -205,6 +206,9 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
   <div class="panel" id="panel-sets" role="tabpanel" aria-labelledby="tab-sets" hidden>
     <p class="muted">Der Balken zeigt, wie viele verschiedene Karten eines Sets du hast. Tippe auf ein Set, um es als Checkliste zu sehen.</p>
     <div class="setliste" id="sets"></div>
+    <h2 id="weitere-titel" hidden>Weitere Sets</h2>
+    <p class="muted" id="weitere-text" hidden>Sets von Karten, die du über die App hinzugefügt hast.</p>
+    <div class="setliste" id="weitere-sets"></div>
     <h2>Besondere Karten</h2>
     <div class="raster" id="sonstige"></div>
   </div>

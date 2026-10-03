@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.17 (03.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.18 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -143,7 +143,8 @@ function trifft(e, suche) {
 function sammlung(inv, fehlt) {
   const suche = $("suche").value.trim().toLowerCase();
   const set = $("s-set").value, sprache = $("s-sprache").value, sort = $("s-sort").value;
-  const doppelt = $("s-doppelt").checked, mitFehl = $("s-fehlend").checked && !doppelt && !sprache;
+  const doppelt = $("s-doppelt").checked, mitFehl = $("s-fehlend").checked && !doppelt && !sprache
+    && (!set || !!B.setkarten[set]);   // fehlende Karten kennt die App nur für die Sets der Grundsammlung
   const bekannt = new Set(SETREIHE);
   let liste = inv.filter(e => (!set || e.set === set || (set === "anderes" && !bekannt.has(e.set))) && (!sprache || e.sprache === sprache) && (!doppelt || e.anzahl > 1) && trifft(e, suche));
   const eigene = liste.length;
@@ -173,6 +174,19 @@ function sammlung(inv, fehlt) {
       <span class="preis">${eur(e.preis)}</span></span>
     </button>`).join("") : `<div class="leer">Keine Karte passt zu diesen Filtern.</div>`;
 }
+// Sprachen einer Kartengruppe als kleine Chips, z. B. „DE 54“ „EN 3“
+function sprachChips(liste) {
+  const n = {};
+  for (const e of liste) n[e.sprache || "?"] = (n[e.sprache || "?"] || 0) + e.anzahl;
+  return Object.entries(n).sort((a, b) => b[1] - a[1])
+    .map(([s, z]) => `<span class="chip" title="${esc(SPRACHE[s] || s)}">${esc(s)} ${z}</span>`).join("");
+}
+// Sets außerhalb der Grundsammlung, die über die App dazugekommen sind – neueste zuerst
+function weitereSets(inv) {
+  const reihe = IDX ? Object.keys(IDX.sets) : [];
+  return [...new Set(inv.map(e => e.set))].filter(s => !SETREIHE.includes(s) && s !== "anderes")
+    .sort((a, b) => reihe.indexOf(b) - reihe.indexOf(a));
+}
 function sets(inv, fehlt) {
   const besitz = besitzMenge(inv);
   $("sets").innerHTML = SETREIHE.filter(s => B.setkarten[s]).map(s => {
@@ -180,8 +194,27 @@ function sets(inv, fehlt) {
     const kosten = fehlt.filter(f => f.set === s).reduce((a, f) => a + (f.preis || 0), 0);
     return `<button type="button" class="setkarte" data-set="${s}"><span><strong>${esc(setName(s))}</strong></span>
       <span class="num">${hat} / ${gesamt}</span>
-      <span class="voll"><span class="balken"><span style="width:${hat / gesamt * 100}%"></span></span><span>${gesamt - hat} fehlen · ca. ${eur(kosten)}</span></span></button>`;
+      <span class="voll"><span class="balken"><span style="width:${hat / gesamt * 100}%"></span></span><span>${gesamt - hat} fehlen · ca. ${eur(kosten)}</span></span>
+      <span class="sprachen">${sprachChips(inv.filter(e => e.set === s))}</span></button>`;
   }).join("");
+  const weitere = weitereSets(inv);
+  $("weitere-titel").hidden = $("weitere-text").hidden = !weitere.length;
+  $("weitere-sets").innerHTML = weitere.map(s => {
+    const teil = inv.filter(e => e.set === s), gesamt = IDX?.sets[s]?.offiziell || 0;
+    const hat = new Set(teil.map(e => String(e.nr))).size, wert = teil.reduce((a, e) => a + e.summe, 0);
+    return `<button type="button" class="setkarte" data-set="${esc(s)}"><span><strong>${esc(setName(s))}</strong></span>
+      <span class="num">${hat}${gesamt ? " / " + gesamt : ""}</span>
+      <span class="voll">${gesamt ? `<span class="balken"><span style="width:${Math.min(100, hat / gesamt * 100)}%"></span></span>` : ""}<span>Wert ca. ${eur(wert)}</span></span>
+      <span class="sprachen">${sprachChips(teil)}</span></button>`;
+  }).join("");
+  // im Filter der Sammlung einzeln wählbar
+  const og = $("s-weitere");
+  if (og) {
+    const wahl = $("s-set").value;
+    og.innerHTML = weitere.map(s => `<option value="${esc(s)}">${esc(setName(s))}</option>`).join("");
+    og.hidden = !weitere.length;
+    $("s-set").value = wahl;
+  }
   $("sonstige").innerHTML = B.sonstige.map(s => `
     <button type="button" class="karte" data-sonstige="${s.key}"><span class="bild">${bildHtml(FOTOS[s.key], s.name)}</span>
       <span class="info"><span class="k-titel">${esc(s.name)}</span><span class="meta">${esc(s.art)}</span><span class="preis">ca. ${eur(s.preis)}</span></span></button>`).join("");
@@ -247,11 +280,13 @@ $("suche").addEventListener("input", () => { if (!["sammlung", "einkaufen"].incl
 $("s-fehlend").addEventListener("change", e => { merke("fehlende-zeigen", e.target.checked ? "1" : ""); if (e.target.checked) { $("s-sort").value = "set"; alles(); } });
 $("s-fehlend").checked = lies("fehlende-zeigen") === "1";
 document.querySelectorAll("[data-stufe]").forEach(b => b.addEventListener("click", () => { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"); alles(); }));
-$("sets").addEventListener("click", e => {
+$("sets").addEventListener("click", zeigeSet);
+$("weitere-sets").addEventListener("click", zeigeSet);
+function zeigeSet(e) {   // Set antippen: in der Sammlung als Checkliste zeigen
   const b = e.target.closest("[data-set]"); if (!b) return;
   $("s-set").value = b.dataset.set; $("s-sprache").value = ""; $("s-doppelt").checked = false; $("s-fehlend").checked = true; $("s-sort").value = "set";
   alles(); zeigeTab("sammlung");
-});
+}
 
 // ---------- Dialoge ----------
 document.querySelectorAll("dialog").forEach(d => {
@@ -761,7 +796,7 @@ let angezeigt = false;
 function starteAnzeige() {
   if (!angezeigt) {
     const opt = SETREIHE.filter(s => B.setkarten[s]).map(s => `<option value="${s}">${esc(setName(s))}</option>`).join("");
-    $("s-set").insertAdjacentHTML("beforeend", opt + `<option value="basep">Promos</option><option value="anderes">Andere Sets</option>`);
+    $("s-set").insertAdjacentHTML("beforeend", opt + `<option value="basep">Promos</option><optgroup label="Weitere Sets" id="s-weitere" hidden></optgroup><option value="anderes">Alle weiteren Sets</option>`);
     $("e-set").insertAdjacentHTML("beforeend", opt);
     zeigeTab(location.hash.slice(1));
     angezeigt = true;
