@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.23 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.24 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -490,7 +490,7 @@ function oeffneNeu(vor = {}) {
   const m = vor.modus || "neu";
   if (m === "neu" && !schreibbar) { toast("Zum Speichern bitte zuerst GitHub in den Einstellungen einrichten."); return; }
   fuelleSets();
-  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null; setVonHand = null;
+  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null; setVonHand = null; speicherId = null;
   $("n-vorschau").innerHTML = `<div class="leerbild"></div>`;
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.";
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
@@ -667,6 +667,8 @@ $("n-nummer-suchen").addEventListener("click", nummerSuchen);
 $("n-nummer").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); nummerSuchen(); } });
 
 const neueId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+// gleiche ID bei einem zweiten Versuch: kam der erste doch an, entsteht kein doppelter Eintrag und kein zweites Foto
+let speicherId = null;
 $("form-neu").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (modus === "pruefen" || !schreibbar) return;
@@ -688,7 +690,7 @@ $("form-neu").addEventListener("submit", async ev => {
                 ...(B.setkarten[g.set] && !VARIANTE_KURZ[variante] ? {} : { preis: g.preis ?? null }) };
   }
   const anzahl = Math.max(1, Math.min(99, parseInt($("n-anzahl").value, 10) || 1));
-  const id = neueId();
+  const id = speicherId ??= neueId();
   knopf.disabled = true; meldung.textContent = neuFoto ? "Foto wird hochgeladen …" : "Speichert …";
   try {
     let foto = null;
@@ -696,11 +698,13 @@ $("form-neu").addEventListener("submit", async ev => {
     meldung.textContent = "Speichert …";
     const neu = { id, ...eintrag, sprache, auflage, anzahl, foto, herkunft: $("n-herkunft").value,
       bezahlt: betrag($("n-preis").value), datum: $("n-datum").value || heute(), notiz: $("n-notiz").value.trim(), erstellt: new Date().toISOString() };
-    ZUG = await speicher.aendern(PFADE.zugaenge, l => [...l, neu], `Zugang: ${anzahl}× ${eintrag.name}`);
+    ZUG = await speicher.aendern(PFADE.zugaenge, l => l.some(x => x.id === id) ? l : [...l, neu], `Zugang: ${anzahl}× ${eintrag.name}`);
+    speicherId = null;
     merkeStand(); alles();
     $("dlg-neu").close(); toast(`Gespeichert: ${eintrag.name}`);
   } catch (e) {
-    meldung.textContent = e?.code === "offline" ? "Keine Internetverbindung – bitte später nochmal speichern."
+    meldung.textContent = e?.code === "zeit" ? "GitHub hat nicht geantwortet (Verbindung zu langsam?). Bitte nochmal auf Speichern tippen."
+      : e?.code === "offline" ? "Keine Internetverbindung – bitte später nochmal speichern."
       : e?.code === "token" || e?.code === "rechte" ? e.message + " Bitte in den Einstellungen prüfen."
       : "Speichern hat nicht geklappt. Bitte noch einmal versuchen.";
   } finally { knopf.disabled = false; }

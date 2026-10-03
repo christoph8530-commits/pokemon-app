@@ -28,14 +28,19 @@ export class GitHubSpeicher {
   }
   async anfrage(pfad, { methode = "GET", body, roh = false } = {}) {
     let antwort;
+    // Zeitlimit: bricht die Mobilverbindung weg, hängt fetch sonst ewig (Fotos dürfen länger dauern)
+    const abbruch = new AbortController(), uhr = setTimeout(() => abbruch.abort(), methode === "PUT" ? 90000 : 30000);
     try {
       antwort = await fetch(`https://api.github.com/repos/${this.repo}/contents/${pfad}` + (methode === "GET" ? `?ref=${this.zweig}` : ""), {
-        method: methode, cache: "no-store",
+        method: methode, cache: "no-store", signal: abbruch.signal,
         headers: { Authorization: `Bearer ${this.token}`, "X-GitHub-Api-Version": "2022-11-28",
                    Accept: roh ? "application/vnd.github.raw+json" : "application/vnd.github+json",
                    ...(body ? { "Content-Type": "application/json" } : {}) },
         body: body ? JSON.stringify(body) : undefined });
-    } catch (e) { throw new SpeicherFehler("offline", "Keine Verbindung zu GitHub."); }
+    } catch (e) {
+      throw abbruch.signal.aborted ? new SpeicherFehler("zeit", "GitHub hat nicht rechtzeitig geantwortet.")
+                                   : new SpeicherFehler("offline", "Keine Verbindung zu GitHub.");
+    } finally { clearTimeout(uhr); }
     if (antwort.status === 404) return null;
     if (antwort.status === 401) throw new SpeicherFehler("token", "Der GitHub-Zugangsschlüssel stimmt nicht oder ist abgelaufen.");
     if (antwort.status === 403) throw new SpeicherFehler("rechte", "Der Zugangsschlüssel darf dieses Repo nicht bearbeiten.");
@@ -88,7 +93,8 @@ export class GitHubSpeicher {
   }
   async fotoHochladen(pfad, blob, nachricht) {
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    await this.anfrage(pfad, { methode: "PUT", body: { message: nachricht, branch: this.zweig, content: base64(bytes) } });
+    try { await this.anfrage(pfad, { methode: "PUT", body: { message: nachricht, branch: this.zweig, content: base64(bytes) } }); }
+    catch (e) { if (e.code !== "konflikt") throw e; }   // gibt es schon: ein früherer Versuch kam doch an
   }
   async fotoLesen(pfad) {
     const a = await this.anfrage(pfad, { roh: true });
