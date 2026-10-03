@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.22 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.23 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -148,6 +148,11 @@ function kartenName(e) {
     else if (IDX.sets[k.set]?.sprachen.includes(sp)) titel = k.en;   // in dieser Sprache gleich wie auf Englisch
   }
   return titel && norm(titel) !== norm(e.name) ? { titel, unter: e.name } : { titel: e.name, unter: "" };
+}
+// im Dialog „Karte hinzufügen“: Name in der gewählten Sprache, der deutsche in Klammern – „Ptitard (Quapsel)“
+function dlgName(id, de) {
+  const n = kartenName({ id, sprache: $("n-sprache").value, name: de });
+  return n.unter ? `${n.titel} (${n.unter})` : n.titel;
 }
 function trifft(e, suche) {
   if (!suche || [e.name, e.nummer, setName(e.set), e.seltenheit, e.sprache, e.auflage, e.holo ? "holo" : ""].join(" ").toLowerCase().includes(suche)) return true;
@@ -360,7 +365,7 @@ function fuelleKarten(nr) {
   if (frei) {
     if (IDX) fuelleAndereSets();
     if (anders) $("n-anders").innerHTML = `<div class="besitz zeile" style="border:0;padding:0;background:none"><div class="zeile">${bildHtml(anders.bild ? anders.bild + "/low.jpg" : null)}
-      <div><strong>${esc(anders.de)}</strong><div class="muted" style="font-size:0.88rem">${esc(setName(anders.set))} · <span class="mono">${esc(nummerVon(anders))}</span></div></div></div></div>`;
+      <div><strong>${esc(dlgName(anders.id, anders.de))}</strong><div class="muted" style="font-size:0.88rem">${esc(setName(anders.set))} · <span class="mono">${esc(nummerVon(anders))}</span></div></div></div></div>`;
     return;
   }
   $("n-karte").innerHTML = `<option value="">– Karte wählen –</option>` + B.setkarten[set].map(k => `<option value="${k.nr}">${k.nr} · ${esc(k.name)}${k.holo ? " (Holo)" : ""}</option>`).join("");
@@ -392,7 +397,7 @@ function fuelleAndereSets() {
 function fuelleAndereKarten() {
   const sid = $("n-aset").value, l = sid ? kartenJeSet()[sid] || [] : [];
   $("n-akarte").innerHTML = `<option value="">${sid ? "– Karte wählen –" : "– zuerst Set wählen –"}</option>` +
-    l.map(k => `<option value="${k.id}">${esc(k.nr)} · ${esc(k.de)}</option>`).join("");
+    l.map(k => `<option value="${k.id}">${esc(k.nr)} · ${esc(dlgName(k.id, k.de))}</option>`).join("");
   $("n-akarte").value = anders?.set === sid ? anders.id : "";
 }
 function andereKarteWeg() { anders = null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); }
@@ -440,7 +445,7 @@ function zeigeBesitz() {
   if (!g) { feld.hidden = true; return; }
   const sp = $("n-sprache").value, au = $("n-auflage").value, va = g.variante;
   const hat = inventar().filter(e => (e.set === g.set && String(e.nr) === String(g.nr)) || gleicherPlatz(e, g));
-  const karte = `${esc(g.name)} · ${esc(setName(g.set))} <span class="mono">${esc(g.nummer)}</span>`;
+  const karte = `${esc(dlgName(g.id, g.name))} · ${esc(setName(g.set))} <span class="mono">${esc(g.nummer)}</span>`;
   const huelle = (klasse, text) => {
     feld.className = "besitz " + klasse;
     feld.innerHTML = `<div class="zeile">${g.bild ? `<img src="${esc(g.bild)}" alt="Bild der erkannten Karte">` : ""}<div>${text}<div class="muted" style="font-size:0.88rem">${karte}</div></div></div>`;
@@ -472,6 +477,12 @@ $("n-set").addEventListener("change", () => {
   anders = set === "anderes" ? anders : null; fuelleKarten(); zeigeBesitz(); markiereKandidat();
 });
 ["n-karte", "n-sprache", "n-auflage", "n-variante"].forEach(id => $(id).addEventListener("change", () => { zeigeBesitz(); markiereKandidat(); zeigeStempel(); }));
+$("n-sprache").addEventListener("change", () => {   // andere Sprache: Kartennamen im Dialog anpassen
+  if ($("n-set").value === "anderes") fuelleKarten();
+  if (!$("n-kandidaten").hidden) zeigeKandidaten();
+  const m = $("n-meldung"), g = gewaehlt();
+  if (g && /^Erkannt: /.test(m.textContent)) m.textContent = m.textContent.replace(/^Erkannt: [^,]*,/, `Erkannt: ${dlgName(g.id, g.name)},`);
+});
 $("n-wechsel").addEventListener("click", () => {
   setzeModus("neu"); $("n-datum").value = heute(); $("n-anzahl").value = 1; $("n-erkennen").hidden = true; $("n-formular").hidden = false;
 });
@@ -569,7 +580,7 @@ function zeigeKandidaten() {
   $("n-kandidaten").innerHTML = `<strong>${erkennung.status === "pruefen" ? "Bitte prüfen: Welche Karte ist es?" : "Andere mögliche Karten"}</strong>
     <div class="reihe">${liste.map(id => { const k = IDX.karte(id);
       return `<button type="button" class="kandidat" data-kandidat="${esc(id)}" aria-pressed="false">${bildHtml(k?.bild ? k.bild + "/low.jpg" : null, k?.de)}
-        <span><strong>${esc(k?.de || id)}</strong><br><span class="muted">${esc(setName(k?.set))} · ${esc(k ? nummerVon(k) : "")}</span></span></button>`; }).join("")}</div>`;
+        <span><strong>${esc(k ? dlgName(id, k.de) : id)}</strong><br><span class="muted">${esc(setName(k?.set))} · ${esc(k ? nummerVon(k) : "")}</span></span></button>`; }).join("")}</div>`;
   markiereKandidat();
 }
 function markiereKandidat() {
@@ -618,11 +629,12 @@ function zeigeErkennung(ohneKI = false) {
       $("n-sprache").value = SPRACHE[r.sprache] && r.sprache !== "andere" ? r.sprache : "andere";
       $("n-auflage").value = r.erste_auflage ? "1. Auflage" : "normal";
       $("n-variante").value = VARIANTE_VON_GEMINI[r.glitzer] || "normal";
+      if ($("n-set").value === "anderes") fuelleKarten();   // Namen in der erkannten Sprache
     }
     zeigeBesitz(); zeigeStempel();
     const g = gewaehlt();
     if (erkennung.status === "ok") {
-      meldung.textContent = `Erkannt: ${g.name}, ${setName(g.set)} ${g.nummer}${$("n-auflage").value === "1. Auflage" ? ", 1. Auflage" : ""}. Stimmt das Bild?`;
+      meldung.textContent = `Erkannt: ${dlgName(g.id, g.name)}, ${setName(g.set)} ${g.nummer}${$("n-auflage").value === "1. Auflage" ? ", 1. Auflage" : ""}. Stimmt das Bild?`;
       if (modus === "pruefen") $("n-korrigieren").hidden = false;
     } else {
       meldung.textContent = ohneKI ? "Ohne KI verglichen: Bitte die richtige Karte antippen oder selbst auswählen." : "Nicht ganz eindeutig – bitte die richtige Karte antippen.";
