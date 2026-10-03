@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.21 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.22 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -750,7 +750,10 @@ $("f-ja").addEventListener("click", async () => {
 // ---------- Einstellungen ----------
 function oeffneEinstellungen() {
   $("e-repo").value = EINST.repo; $("e-token").value = EINST.token; $("e-gemini").value = EINST.gemini;
-  $("e-ergebnis").innerHTML = `<div class="muted">App-Version ${VERSION}</div>`; $("dlg-einstellungen").showModal();
+  $("e-ergebnis").innerHTML = `<div class="muted">App-Version ${VERSION}</div>
+    <button type="button" class="knopf" id="e-aktualisieren" style="justify-self:start">App aktualisieren</button>`;
+  $("e-aktualisieren").onclick = aktualisieren;
+  $("dlg-einstellungen").showModal();
 }
 $("einstellungen-knopf").addEventListener("click", oeffneEinstellungen);
 $("e-vergessen").addEventListener("click", () => {
@@ -823,6 +826,15 @@ function starteAnzeige() {
   }
   $("fab-pruefen").hidden = false;
   alles();
+}
+// „App aktualisieren“: neueste Fassung von GitHub holen, alte Kopien verwerfen, neu laden
+async function aktualisieren() {
+  const k = $("e-aktualisieren"); k.disabled = true; k.textContent = "Lade neueste Version …";
+  const dateien = ["./", "index.html", "app.js", "erkennung.js", "speicher.js", "sw.js", "daten/karten-index.json"];
+  try { await Promise.all(dateien.map(u => fetch(u, { cache: "reload" }))); } catch {}
+  try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch {}
+  try { for (const n of await caches.keys()) if (n.startsWith("app-")) await caches.delete(n); } catch {}
+  location.reload();
 }
 function neueVersionHinweis() {
   if ($("neue-version")) return;

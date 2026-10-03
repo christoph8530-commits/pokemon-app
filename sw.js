@@ -1,10 +1,11 @@
 // Service Worker: hält die App und die Kartenbilder offline bereit.
 // Daten von GitHub und Anfragen an Gemini laufen nie über den Zwischenspeicher.
-const VERSION = "v20";
+const VERSION = "v21";
 const APP = ["./", "index.html", "app.js", "erkennung.js", "speicher.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "daten/karten-index.json"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open("app-" + VERSION).then(c => c.addAll(APP)).then(() => self.skipWaiting()));
+  // cache: "reload" – nicht die bis zu 10 Minuten alte Kopie aus dem Browser-Zwischenspeicher nehmen
+  e.waitUntil(caches.open("app-" + VERSION).then(c => c.addAll(APP.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(namen => Promise.all(namen.filter(n => n.startsWith("app-") && n !== "app-" + VERSION).map(n => caches.delete(n))))
@@ -26,7 +27,8 @@ self.addEventListener("fetch", e => {
   }
   if (url.origin === self.location.origin) {
     // App-Dateien: zuerst aus dem Netz (damit Updates ankommen), ohne Netz aus dem Zwischenspeicher
-    e.respondWith(fetch(e.request).then(antwort => {
+    // „no-cache“: beim Server nachfragen, ob es eine neuere Fassung gibt (GitHub Pages erlaubt sonst 10 Minuten alte Kopien)
+    e.respondWith(fetch(e.request, { cache: "no-cache" }).then(antwort => {
       if (antwort.ok) caches.open("app-" + VERSION).then(c => c.put(e.request, antwort.clone()));
       return antwort;
     }).catch(() => caches.match(e.request).then(a => a || caches.match("index.html"))));
