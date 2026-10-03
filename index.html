@@ -163,6 +163,9 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .einstellungen input { font: inherit; font-size: 1rem; text-transform: none; letter-spacing: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .einstellungen .hinweis { font-size: 0.86rem; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .pruefliste { display: grid; gap: 4px; font-size: 0.92rem; }
+.neu-oben { position: sticky; top: 0; z-index: 5; display: grid; gap: 10px; margin: -18px -18px 0; padding: 18px 18px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.neu-oben .dlg-fuss { align-items: center; }
+.neu-oben .meldung:empty { display: none; }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
 </head>
@@ -236,7 +239,10 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 
 <dialog id="dlg-neu" aria-labelledby="neu-titel">
   <form class="dlg" id="form-neu" method="dialog">
-    <div class="dlg-kopf"><h2 id="neu-titel">Karte hinzufügen</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="neu-oben">
+      <div class="dlg-kopf"><h2 id="neu-titel">Karte hinzufügen</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+      <div class="dlg-fuss"><span class="meldung" id="n-speichern-meldung"></span><button type="button" class="knopf" id="n-naechste" hidden>Nächste Karte scannen</button><button type="button" class="knopf voll" id="n-wechsel" hidden>Zur Sammlung hinzufügen</button><button type="submit" class="knopf voll" id="n-speichern">Speichern</button></div>
+    </div>
     <div class="fotofeld">
       <div id="n-vorschau"><div class="leerbild"></div></div>
       <div class="aktionen">
@@ -269,7 +275,6 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
       <label class="nur-neu">Datum<input id="n-datum" type="date"></label>
       <label class="breit nur-neu">Notiz<input id="n-notiz" type="text" placeholder="optional, z. B. Börse Wien, Zustand gut"></label>
     </div>
-    <div class="dlg-fuss"><span class="meldung" id="n-speichern-meldung"></span><button type="button" class="knopf" id="n-naechste" hidden>Nächste Karte scannen</button><button type="button" class="knopf voll" id="n-wechsel" hidden>Zur Sammlung hinzufügen</button><button type="submit" class="knopf voll" id="n-speichern">Speichern</button></div>
   </form>
 </dialog>
 
