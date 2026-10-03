@@ -1,6 +1,6 @@
 // Pokémon-Sammlung – eigenständige Web-App (ohne Claude).
 // Daten: privates GitHub-Repo (speicher.js). Erkennung: Gemini + Nachschlagewerk (erkennung.js).
-import { Index, bestimme, nurBild, neuZuordnen, nummerMitKuerzel, haken, kanonisch, ERSTAUFLAGE_SETS } from "./erkennung.js";
+import { Index, bestimme, nurBild, neuZuordnen, nummerMitKuerzel, haken, kanonisch, norm, ERSTAUFLAGE_SETS } from "./erkennung.js";
 import { GitHubSpeicher, TestSpeicher, PFADE } from "./speicher.js";
 
 // ---------- Grundlagen ----------
@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.19 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.20 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -139,7 +139,10 @@ function bilanz(inv) {
     <div><span class="label">Über die App</span><span class="wert">+${neu} / −${weg}</span><small>hinzugefügt / verkauft</small></div>`;
 }
 function trifft(e, suche) {
-  return !suche || [e.name, e.nummer, setName(e.set), e.seltenheit, e.sprache, e.auflage, e.holo ? "holo" : ""].join(" ").toLowerCase().includes(suche);
+  if (!suche || [e.name, e.nummer, setName(e.set), e.seltenheit, e.sprache, e.auflage, e.holo ? "holo" : ""].join(" ").toLowerCase().includes(suche)) return true;
+  // auch englische, französische, italienische … Namen aus dem Kartenverzeichnis („Capumain“ findet Griffel)
+  const k = e.id && IDX?.karte(e.id), n = norm(suche);
+  return !!k && n.length >= 3 && [k.nen, ...k.nw].some(w => w.includes(n));
 }
 function sammlung(inv, fehlt) {
   const suche = $("suche").value.trim().toLowerCase();
