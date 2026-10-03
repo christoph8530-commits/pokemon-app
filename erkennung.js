@@ -64,14 +64,20 @@ export class Index {
   constructor(daten) {
     this.stand = daten.stand;
     this.sets = {};
-    for (const [id, [name, name_de, serie, offiziell, gesamt, pfad, kuerzel]] of Object.entries(daten.sets))
-      this.sets[id] = { id, name, name_de, serie, offiziell, gesamt, pfad, kuerzel: (kuerzel || "").toUpperCase() };
+    for (const [id, [name, name_de, serie, offiziell, gesamt, pfad, kuerzel, sprachen]] of Object.entries(daten.sets))
+      this.sets[id] = { id, name, name_de, serie, offiziell, gesamt, pfad, kuerzel: (kuerzel || "").toUpperCase(),
+                        sprachen: sprachen ? sprachen.split(",") : [] };
     this.karten = [];
     for (const [sid, liste] of Object.entries(daten.karten))
-      for (const [nr, en, de, bild, weitere] of liste)
-        this.karten.push({ id: `${sid}-${nr}`, set: sid, nr, en, de: de || en,
+      for (const [nr, en, de, bild, weitere] of liste) {
+        // „fr=Capumain|it=Aipom“ (neu) oder „Capumain|Aipom“ (ältere Verzeichnisse ohne Sprache)
+        const teile = weitere ? weitere.split("|").map(w => w.match(/^([a-z]{2})=(.*)$/) || [null, null, w]) : [];
+        const namen = {};
+        for (const [, sp, n] of teile) if (sp) namen[sp] = n;
+        this.karten.push({ id: `${sid}-${nr}`, set: sid, nr, en, de: de || en, namen,
           bild: bild === 1 ? `${BILDER}${this.sets[sid].pfad}/${nr}` : bild ? BILDER + bild : null,
-          nen: norm(en), nde: norm(de || en), nw: weitere ? weitere.split("|").map(norm) : [] });
+          nen: norm(en), nde: norm(de || en), nw: [...new Set(teile.map(t => norm(t[2])))] });
+      }
     this.nachId = new Map(this.karten.map(k => [k.id, k]));
     this.nrPraefixe = new Set(this.karten.map(k => (k.nr.match(/^[A-Za-z]+/) || [""])[0].toUpperCase()));   // TG, SWSH, XY …
   }

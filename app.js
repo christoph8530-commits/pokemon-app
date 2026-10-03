@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.20 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.21 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -138,6 +138,17 @@ function bilanz(inv) {
     <div><span class="label">Grundset</span><span class="wert">${gs} / 102</span><small>verschiedene Karten</small></div>
     <div><span class="label">Über die App</span><span class="wert">+${neu} / −${weg}</span><small>hinzugefügt / verkauft</small></div>`;
 }
+// Name, wie er auf der Karte steht (Sprache der Karte); der deutsche Name als Zusatz, wenn er anders lautet
+function kartenName(e) {
+  const k = e.id && IDX?.karte(e.id), sp = String(e.sprache || "").toLowerCase();
+  let titel = null;
+  if (k && sp !== "de") {
+    if (sp === "en") titel = k.en;
+    else if (k.namen[sp]) titel = k.namen[sp];
+    else if (IDX.sets[k.set]?.sprachen.includes(sp)) titel = k.en;   // in dieser Sprache gleich wie auf Englisch
+  }
+  return titel && norm(titel) !== norm(e.name) ? { titel, unter: e.name } : { titel: e.name, unter: "" };
+}
 function trifft(e, suche) {
   if (!suche || [e.name, e.nummer, setName(e.set), e.seltenheit, e.sprache, e.auflage, e.holo ? "holo" : ""].join(" ").toLowerCase().includes(suche)) return true;
   // auch englische, französische, italienische … Namen aus dem Kartenverzeichnis („Capumain“ findet Griffel)
@@ -173,7 +184,7 @@ function sammlung(inv, fehlt) {
     <button type="button" class="karte" data-key="${esc(e.key)}">
       <span class="bild">${bildHtml(bildVon(e), e.name)}</span>
       ${e.anzahl > 1 ? `<span class="stueck">×${e.anzahl}</span>` : ""}${e.neu || e.zugang ? `<span class="marke neu">Neu</span>` : ""}
-      <span class="info"><span class="k-titel">${esc(e.name)}</span><span class="meta">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> ${e.symbol}</span>
+      <span class="info"><span class="k-titel">${esc(kartenName(e).titel)}</span>${kartenName(e).unter ? `<span class="meta">${esc(kartenName(e).unter)}</span>` : ""}<span class="meta">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> ${e.symbol}</span>
       <span class="chips"><span class="chip">${esc(e.sprache)}</span>${e.holo ? `<span class="chip gelb">Holo</span>` : ""}${e.auflage === "1. Auflage" ? `<span class="chip gelb">1. Aufl.</span>` : ""}${VARIANTE_KURZ[e.variante] ? `<span class="chip gelb">${VARIANTE_KURZ[e.variante]}</span>` : ""}</span>
       <span class="preis">${eur(e.preis)}</span></span>
     </button>`).join("") : `<div class="leer">Keine Karte passt zu diesen Filtern.</div>`;
@@ -254,7 +265,7 @@ function verkaufen(inv) {
     <div><span class="muted">Schon verkauft</span><span class="wert">${eur(erloes)}</span><small class="muted">${VK.reduce((a, v) => a + (Number(v.anzahl) || 0), 0)} Karten, dazu ${s3.stueck} im Restposten</small></div>`;
   const liste = inv.filter(e => st(e) === 1).sort((a, b) => (b.preis || 0) - (a.preis || 0));
   $("v-einzeln").innerHTML = liste.map(e => `<li style="cursor:pointer" data-key="${esc(e.key)}"><span class="streifen" style="background:var(--accent)"></span>${bildHtml(bildVon(e), e.name)}
-    <span class="name">${esc(e.name)}${e.anzahl > 1 ? ` <span class="muted">×${e.anzahl}</span>` : ""}<span class="unter">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)}${e.auflage === "1. Auflage" ? " · 1. Aufl." : ""}</span></span>
+    <span class="name">${esc(kartenName(e).titel)}${e.anzahl > 1 ? ` <span class="muted">×${e.anzahl}</span>` : ""}<span class="unter">${kartenName(e).unter ? esc(kartenName(e).unter) + " · " : ""}${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)}${e.auflage === "1. Auflage" ? " · 1. Aufl." : ""}</span></span>
     <span class="rechts"><strong>${eur(richtpreis(e))}</strong><span class="muted" style="font-size:0.8rem">Markt ${eur(e.preis)}</span></span></li>`).join("");
 }
 function verlauf() {
@@ -267,7 +278,7 @@ function verlauf() {
     <div><span class="muted">Eingenommen</span><span class="wert">${eur(eingenommen)}</span><small class="muted">${VK.length} Verkäufe</small></div>`;
   $("h-liste").innerHTML = eintraege.length ? eintraege.map(x => `<li><span class="streifen" style="background:${x.art === "zugang" ? "var(--guenstig)" : "var(--teuer)"}"></span>
     ${bildHtml(x.art === "zugang" && x.foto ? fotoUrl(x.foto) || setBild(x.set, x.nr, x.id_karte) : setBild(x.set, x.nr, x.id_karte))}
-    <span class="name">${x.art === "zugang" ? "＋" : "−"} ${esc(x.name)} ${Number(x.anzahl) > 1 ? `×${x.anzahl}` : ""}
+    <span class="name">${x.art === "zugang" ? "＋" : "−"} ${esc(kartenName({ id: x.id_karte, sprache: x.sprache, name: x.name }).titel)} ${Number(x.anzahl) > 1 ? `×${x.anzahl}` : ""}
       <span class="unter">${esc(setName(x.set))} ${x.nummer ? "· " + esc(x.nummer) : ""} · ${esc(x.sprache || "")} · ${datumText(x.datum)} · ${esc(x.art === "zugang" ? x.herkunft : x.plattform)}${x.notiz ? " · " + esc(x.notiz) : ""}</span></span>
     <span class="rechts">${x.art === "zugang" ? (x.bezahlt != null ? eur(x.bezahlt) : "") : eur(x.preis)}${schreibbar ? `<button type="button" class="knopf gefahr" data-loeschen="${x.art}|${x.id}">Löschen</button>` : ""}</span></li>`).join("")
     : `<li style="display:block;padding:14px"><span class="muted">Noch keine Einträge. Neue Karten erfasst du mit dem Knopf „＋ Karte“ unten rechts, Verkäufe über eine Karte in der Sammlung.</span></li>`;
@@ -303,12 +314,13 @@ document.querySelectorAll("dialog").forEach(d => {
 
 function zeigeKarte(key) {
   const e = inventar().find(x => x.key === key); if (!e) return;
-  $("k-titel").textContent = e.name;
+  const n = kartenName(e);
+  $("k-titel").textContent = n.titel;
   $("k-bild").innerHTML = bildHtml(bildVon(e), e.name);
   const teile = [`${e.anzahl} Stück`];
   if (e.zugang) teile.push(`${e.zugang} über die App hinzugefügt`);
   if (e.verkauft) teile.push(`${e.verkauft} verkauft`);
-  $("k-info").innerHTML = `<div class="muted">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)} · ${esc(e.auflage)}${VARIANTE_KURZ[e.variante] ? " · " + VARIANTE[e.variante] : ""}${e.seltenheit ? " · " + esc(e.seltenheit) : ""}</div>
+  $("k-info").innerHTML = `${n.unter ? `<div>Deutsch: ${esc(n.unter)}</div>` : ""}<div class="muted">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)} · ${esc(e.auflage)}${VARIANTE_KURZ[e.variante] ? " · " + VARIANTE[e.variante] : ""}${e.seltenheit ? " · " + esc(e.seltenheit) : ""}</div>
     <div>${teile.join(" · ")}</div>
     <div>Marktwert <strong class="num">${eur(e.preis)}</strong> pro Stück${richtpreis(e) ? ` · Angebotspreis ca. <strong class="num">${eur(richtpreis(e))}</strong>` : ""}</div>
     <div><a href="${cm(e.name)}" target="_blank" rel="noopener">Auf Cardmarket ansehen</a></div>`;
