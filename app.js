@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.18 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.19 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -79,7 +79,8 @@ function setName(set) {
 }
 
 // ---------- Bilder ----------
-function setBild(set, nr) { const k = indexKarte(set, nr); return k?.bild ? k.bild + "/low.jpg" : null; }
+// Kartenbild aus dem Verzeichnis – über die Karten-ID, weil neuere Sets dreistellige Nummern haben (me04-011, nicht me04-11)
+function setBild(set, nr, id) { const k = (id && IDX?.karte(id)) || indexKarte(set, nr); return k?.bild ? k.bild + "/low.jpg" : null; }
 function fotoUrl(pfad) {
   if (!pfad) return null;
   if (FOTOURL[pfad]) return FOTOURL[pfad] === "laedt" ? null : FOTOURL[pfad];
@@ -87,7 +88,7 @@ function fotoUrl(pfad) {
   speicher?.fotoLesen(pfad).then(b => { FOTOURL[pfad] = b ? URL.createObjectURL(b) : null; spaeter(); }).catch(() => { FOTOURL[pfad] = null; });
   return null;
 }
-function bildVon(e) { return FOTOS[e.key] || fotoUrl(e.foto) || setBild(e.set, e.nr); }
+function bildVon(e) { return FOTOS[e.key] || fotoUrl(e.foto) || setBild(e.set, e.nr, e.id); }
 function bildHtml(src, alt = "") { return src ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy">` : `<div class="leerbild"></div>`; }
 
 let spaeterZeit;
@@ -189,8 +190,10 @@ function weitereSets(inv) {
 }
 function sets(inv, fehlt) {
   const besitz = besitzMenge(inv);
+  const stand = {};   // Set → „hat/gesamt“ für den Filter der Sammlung
   $("sets").innerHTML = SETREIHE.filter(s => B.setkarten[s]).map(s => {
     const hat = B.setkarten[s].filter(k => besitz.has(`${s}|${k.nr}`)).length, gesamt = B.setkarten[s].length;
+    stand[s] = `${hat}/${gesamt}`;
     const kosten = fehlt.filter(f => f.set === s).reduce((a, f) => a + (f.preis || 0), 0);
     return `<button type="button" class="setkarte" data-set="${s}"><span><strong>${esc(setName(s))}</strong></span>
       <span class="num">${hat} / ${gesamt}</span>
@@ -202,6 +205,7 @@ function sets(inv, fehlt) {
   $("weitere-sets").innerHTML = weitere.map(s => {
     const teil = inv.filter(e => e.set === s), gesamt = IDX?.sets[s]?.offiziell || 0;
     const hat = new Set(teil.map(e => String(e.nr))).size, wert = teil.reduce((a, e) => a + e.summe, 0);
+    stand[s] = gesamt ? `${hat}/${gesamt}` : `${hat}`;
     return `<button type="button" class="setkarte" data-set="${esc(s)}"><span><strong>${esc(setName(s))}</strong></span>
       <span class="num">${hat}${gesamt ? " / " + gesamt : ""}</span>
       <span class="voll">${gesamt ? `<span class="balken"><span style="width:${Math.min(100, hat / gesamt * 100)}%"></span></span>` : ""}<span>Wert ca. ${eur(wert)}</span></span>
@@ -211,10 +215,11 @@ function sets(inv, fehlt) {
   const og = $("s-weitere");
   if (og) {
     const wahl = $("s-set").value;
-    og.innerHTML = weitere.map(s => `<option value="${esc(s)}">${esc(setName(s))}</option>`).join("");
+    og.innerHTML = weitere.map(s => `<option value="${esc(s)}">${esc(setName(s))} · ${stand[s]}</option>`).join("");
     og.hidden = !weitere.length;
     $("s-set").value = wahl;
   }
+  for (const o of $("s-set").options) if (B.setkarten[o.value] && stand[o.value]) o.textContent = `${setName(o.value)} · ${stand[o.value]}`;
   $("sonstige").innerHTML = B.sonstige.map(s => `
     <button type="button" class="karte" data-sonstige="${s.key}"><span class="bild">${bildHtml(FOTOS[s.key], s.name)}</span>
       <span class="info"><span class="k-titel">${esc(s.name)}</span><span class="meta">${esc(s.art)}</span><span class="preis">ca. ${eur(s.preis)}</span></span></button>`).join("");
@@ -258,7 +263,7 @@ function verlauf() {
     <div><span class="muted">Ausgegeben</span><span class="wert">${eur(ausgegeben)}</span><small class="muted">soweit eingetragen</small></div>
     <div><span class="muted">Eingenommen</span><span class="wert">${eur(eingenommen)}</span><small class="muted">${VK.length} Verkäufe</small></div>`;
   $("h-liste").innerHTML = eintraege.length ? eintraege.map(x => `<li><span class="streifen" style="background:${x.art === "zugang" ? "var(--guenstig)" : "var(--teuer)"}"></span>
-    ${bildHtml(x.art === "zugang" && x.foto ? fotoUrl(x.foto) || setBild(x.set, x.nr) : setBild(x.set, x.nr))}
+    ${bildHtml(x.art === "zugang" && x.foto ? fotoUrl(x.foto) || setBild(x.set, x.nr, x.id_karte) : setBild(x.set, x.nr, x.id_karte))}
     <span class="name">${x.art === "zugang" ? "＋" : "−"} ${esc(x.name)} ${Number(x.anzahl) > 1 ? `×${x.anzahl}` : ""}
       <span class="unter">${esc(setName(x.set))} ${x.nummer ? "· " + esc(x.nummer) : ""} · ${esc(x.sprache || "")} · ${datumText(x.datum)} · ${esc(x.art === "zugang" ? x.herkunft : x.plattform)}${x.notiz ? " · " + esc(x.notiz) : ""}</span></span>
     <span class="rechts">${x.art === "zugang" ? (x.bezahlt != null ? eur(x.bezahlt) : "") : eur(x.preis)}${schreibbar ? `<button type="button" class="knopf gefahr" data-loeschen="${x.art}|${x.id}">Löschen</button>` : ""}</span></li>`).join("")

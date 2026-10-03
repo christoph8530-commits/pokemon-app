@@ -120,6 +120,10 @@ export class TestSpeicher {
     await this.schreiben(pfad, neu, nachricht); return neu;
   }
   async fotoHochladen(pfad, blob, nachricht) { this.fotos[pfad] = blob; this.schreibvorgaenge.push({ pfad, nachricht }); }
-  async fotoLesen(pfad) { return this.fotos[pfad] || null; }
+  async fotoLesen(pfad) {
+    if (this.fotos[pfad]) return this.fotos[pfad];
+    const a = await fetch(this.basisUrl + pfad).catch(() => null);
+    return a && a.ok ? a.blob() : null;
+  }
   async loeschen(pfad, nachricht) { delete this.fotos[pfad]; delete this.dateien[pfad]; this.schreibvorgaenge.push({ pfad, nachricht }); }
 }
