@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.24 (04.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.25 (06.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -243,6 +243,80 @@ function sets(inv, fehlt) {
     <button type="button" class="karte" data-sonstige="${s.key}"><span class="bild">${bildHtml(FOTOS[s.key], s.name)}</span>
       <span class="info"><span class="k-titel">${esc(s.name)}</span><span class="meta">${esc(s.art)}</span><span class="preis">ca. ${eur(s.preis)}</span></span></button>`).join("");
 }
+// ---------- Binder-Plan: welche Karte in welches Fach (2 Alben mit 9 Fächern pro Seite, je 60 Seiten) ----------
+// Wie katalog/binder_plan.py: jedes Set auf einer neuen Seite, Nummernfolge, Fächer für fehlende Karten bleiben frei;
+// pro Nummer das beste Exemplar (1. Auflage, dann Deutsch, dann höherer Wert); neuere Karten ohne Lücken.
+const ALBEN = [["Album A", ["base1", "base2", "base3", "base5", "neo1", "basep"]], ["Album B", ["gym1", "gym2"]]];
+const KLEINE_SETS = ["mee", "sve", "mep"];
+let binderAlbum = 0;
+function binderPlan(inv) {
+  const nrVon = e => typeof e.nr === "number" && e.nr < 999 ? e.nr : parseInt(String(e.nummer || "").replace(/\D.*$/, ""), 10) || 0;
+  const besitz = new Map();
+  for (const e of inv) { const k = `${e.set}|${nrVon(e)}`; if (!besitz.has(k)) besitz.set(k, []); besitz.get(k).push(e); }
+  const bestes = l => [...l].sort((a, b) => (a.auflage !== "1. Auflage") - (b.auflage !== "1. Auflage") || (a.sprache !== "DE") - (b.sprache !== "DE") || (b.preis || 0) - (a.preis || 0))[0];
+  const schutz = e => (e.preis || 0) >= 30 ? "top" : (e.preis || 0) >= 10 || e.auflage === "1. Auflage" ? "huelle" : "";
+  const fach = (e, n) => { const k = kartenName(e); return { nr: n, hat: true, e, name: k.titel, de: k.unter, schutz: schutz(e) }; };
+  const im = new Set();
+  const alben = ALBEN.map(([titel, liste]) => [titel, liste.filter(s => s !== "basep" || inv.some(e => e.set === s)).map(s => {
+    if (s === "basep" || !B.setkarten[s]) {         // Promos: nur vorhandene, ohne Lücken
+      const f = [...besitz].filter(([k]) => k.startsWith(s + "|")).map(([k, l]) => fach(bestes(l), Number(k.split("|")[1]))).sort((a, b) => a.nr - b.nr);
+      f.forEach(x => im.add(x.e.key)); return { name: setName(s), faecher: f, luecken: false };
+    }
+    const groesse = Math.max(B.setkarten[s].length, ...B.setkarten[s].map(k => k.nr));
+    const faecher = [];
+    for (let n = 1; n <= groesse; n++) {
+      const l = besitz.get(`${s}|${n}`), anderes = s === "gym1" ? "gym2" : "gym1";
+      if (l) { const f = fach(bestes(l), n); im.add(f.e.key); faecher.push(f); }
+      else if ((s === "gym1" || s === "gym2") && n >= 127 && n <= 132 && besitz.has(`${anderes}|${n}`))
+        faecher.push({ nr: n, verweis: `bei ${setName(anderes)}` });
+      else { const k = setInfo(s, n); faecher.push({ nr: n, name: k?.name || "", hat: false }); }
+    }
+    return { name: setName(s), faecher, luecken: true };
+  })]);
+  // neuere Karten in Album B: ohne Lücken, jedes Set auf einer neuen Seite, Energien und Promos zusammen
+  const neu = weitereSets(inv).filter(s => !ALBEN.some(([, l]) => l.includes(s))).reverse();
+  const gruppen = neu.filter(s => !KLEINE_SETS.includes(s)).map(s => [setName(s), [s]]);
+  const klein = neu.filter(s => KLEINE_SETS.includes(s));
+  if (klein.length) gruppen.push(["Energien und Promos", klein]);
+  for (const [name, sl] of gruppen) {
+    const f = [];
+    for (const s of sl) [...besitz].filter(([k]) => k.startsWith(s + "|")).sort((a, b) => Number(a[0].split("|")[1]) - Number(b[0].split("|")[1]))
+      .forEach(([k, l]) => { const x = fach(bestes(l), Number(k.split("|")[1])); x.set = sl.length > 1 ? setName(s) : ""; im.add(x.e.key); f.push(x); });
+    alben[1][1].push({ name, faecher: f, luecken: false });
+  }
+  const box = inv.reduce((a, e) => a + e.anzahl, 0) - im.size;
+  return { alben, box };
+}
+function zeigeBinder() {
+  const { alben, box } = binderPlan(inventar());
+  const seitenZahl = ab => ab.reduce((a, s) => a + Math.ceil(s.faecher.length / 9), 0);
+  $("b-wahl").innerHTML = alben.map(([t, ab], i) => `<button type="button" class="chip-knopf" data-album="${i}" aria-pressed="${i === binderAlbum}">${esc(t)} · ${seitenZahl(ab)} von 60 Seiten</button>`).join("");
+  const huellen = alben.flatMap(([, ab]) => ab.flatMap(s => s.faecher)).filter(f => f.schutz === "huelle").length;
+  $("b-info").textContent = `Jedes Set beginnt auf einer neuen Seite, gestrichelte Fächer frei lassen. ${huellen} Karten vorher in eine Penny-Hülle, ${box} Doppelte in die Box. Fach antippen: Karte ansehen.`;
+  let nr = 0;
+  $("b-seiten").innerHTML = alben[binderAlbum][1].flatMap(abschnitt => {
+    const seiten = [];
+    for (let i = 0; i < abschnitt.faecher.length; i += 9) {
+      const teil = abschnitt.faecher.slice(i, i + 9);
+      nr++;
+      const bereich = abschnitt.luecken ? `Nr. ${teil[0].nr}–${teil.at(-1).nr} · ` : "";
+      seiten.push(`<section class="b-seite"><header><span><strong>Seite ${nr}</strong> · ${esc(abschnitt.name)}</span><span class="muted">${bereich}${teil.filter(f => f.hat).length}/${teil.length}</span></header>
+        <div class="b-raster">${teil.map(binderFach).join("")}${'<div class="b-fach frei"></div>'.repeat(9 - teil.length)}</div></section>`);
+    }
+    return seiten;
+  }).join("");
+}
+function binderFach(f) {
+  if (f.verweis) return `<div class="b-fach leer"><span class="nr">${f.nr}</span><span class="nm">→ ${esc(f.verweis)}</span></div>`;
+  if (!f.hat) return `<div class="b-fach leer"><span class="nr">${f.nr}</span><span class="nm">${esc(f.name)}</span><span class="zs">fehlt</span></div>`;
+  const e = f.e, zusatz = [f.set, f.de, e.sprache !== "DE" ? e.sprache : "", e.auflage === "1. Auflage" ? "1. Aufl." : "", VARIANTE_KURZ[e.variante] || ""].filter(Boolean).join(" · ");
+  return `<button type="button" class="b-fach" data-key="${esc(e.key)}"><span class="nr">${f.nr}</span><span class="nm">${esc(f.name)}</span>
+    ${zusatz ? `<span class="zs">${esc(zusatz)}</span>` : ""}${f.schutz ? `<span class="hl${f.schutz === "top" ? " top" : ""}">${f.schutz === "top" ? "Toploader" : "Hülle"}</span>` : ""}</button>`;
+}
+$("binder-knopf").addEventListener("click", () => { zeigeBinder(); $("dlg-binder").showModal(); });
+$("b-wahl").addEventListener("click", e => { const b = e.target.closest("[data-album]"); if (b) { binderAlbum = Number(b.dataset.album); zeigeBinder(); $("b-seiten").scrollIntoView({ block: "start" }); } });
+$("b-seiten").addEventListener("click", e => { const b = e.target.closest("[data-key]"); if (b) zeigeKarte(b.dataset.key); });
+
 function einkaufen(fehlt) {
   const suche = $("suche").value.trim().toLowerCase(), set = $("e-set").value, sort = $("e-sort").value;
   const stufen = [...document.querySelectorAll("[data-stufe]")].filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.dataset.stufe);

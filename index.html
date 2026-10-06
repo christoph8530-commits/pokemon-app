@@ -167,6 +167,23 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .neu-oben .dlg-fuss { align-items: center; }
 .neu-oben .meldung:empty { display: none; }
 .setkarte .sprachen { grid-column: 1 / 3; display: flex; gap: 4px; flex-wrap: wrap; }
+.binder-dlg { width: min(760px, calc(100vw - 16px)); }
+.binder-wahl { display: flex; gap: 8px; flex-wrap: wrap; }
+.b-seiten { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.b-seite { border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); }
+.b-seite header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+.b-seite header .muted { white-space: nowrap; }
+.b-raster { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.b-fach { position: relative; min-height: 64px; border: 1.5px solid var(--ink); border-radius: 6px; padding: 3px 5px; background: var(--surface); display: flex; flex-direction: column; gap: 1px; overflow: hidden; text-align: left; color: inherit; font: inherit; }
+button.b-fach { cursor: pointer; }
+.b-fach.leer { border: 1.5px dashed var(--line); background: transparent; color: var(--muted); }
+.b-fach.frei { border: 1px dotted var(--line); background: transparent; }
+.b-fach .nr { font-family: var(--mono); font-weight: 600; font-size: 0.85rem; }
+.b-fach .nm { font-weight: 700; font-size: 0.74rem; line-height: 1.15; hyphens: auto; overflow-wrap: anywhere; }
+.b-fach.leer .nm { font-weight: 400; }
+.b-fach .zs { font-size: 0.64rem; color: var(--muted); line-height: 1.15; }
+.b-fach .hl { position: absolute; top: 2px; right: 2px; font-size: 0.58rem; font-weight: 700; padding: 0 4px; border-radius: 99px; background: var(--frame); color: #000; }
+.b-fach .hl.top { background: var(--teuer); color: #fff; }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
 </head>
@@ -205,6 +222,7 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 
   <div class="panel" id="panel-sets" role="tabpanel" aria-labelledby="tab-sets" hidden>
     <p class="muted">Der Balken zeigt, wie viele verschiedene Karten eines Sets du hast. Tippe auf ein Set, um es als Checkliste zu sehen.</p>
+    <button type="button" class="knopf voll" id="binder-knopf" style="justify-self:start">Binder-Plan anzeigen</button>
     <div class="setliste" id="sets"></div>
     <h2 id="weitere-titel" hidden>Weitere Sets</h2>
     <p class="muted" id="weitere-text" hidden>Sets von Karten, die du über die App hinzugefügt hast.</p>
@@ -328,6 +346,14 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     <div class="pruefliste" id="e-ergebnis"></div>
     <div class="dlg-fuss"><button type="button" class="knopf gefahr" id="e-vergessen">Schlüssel entfernen</button><button type="submit" class="knopf voll" id="e-speichern">Speichern und prüfen</button></div>
   </form>
+</dialog>
+<dialog id="dlg-binder" class="binder-dlg" aria-labelledby="b-titel">
+  <div class="dlg">
+    <div class="dlg-kopf"><h2 id="b-titel">Binder-Plan</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="binder-wahl" id="b-wahl"></div>
+    <p class="muted" id="b-info"></p>
+    <div class="b-seiten" id="b-seiten"></div>
+  </div>
 </dialog>
 <script type="module" src="app.js"></script>
 </body>
