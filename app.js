@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.26 (07.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.27 (07.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -784,6 +784,11 @@ $("form-neu").addEventListener("submit", async ev => {
     eintrag = { set: g.set, nr: g.nr, name: g.name, nummer: g.nummer, id_karte: g.id, key: schluessel(g.id, sprache, auflage, variante),
                 ...(VARIANTE_KURZ[variante] ? { variante } : {}),
                 ...(B.setkarten[g.set] && !VARIANTE_KURZ[variante] ? {} : { preis: g.preis ?? null }) };
+  }
+  // Preis noch nicht da (zweite Quelle antwortet langsam): kurz darauf warten statt ohne Preis zu speichern
+  if ("preis" in eintrag && eintrag.preis == null && eintrag.id_karte) {
+    meldung.textContent = "Hole den Marktwert …";
+    eintrag.preis = await Promise.race([livePreis(eintrag.id_karte, variante), new Promise(r => setTimeout(() => r(null), 15000))]);
   }
   const anzahl = Math.max(1, Math.min(99, parseInt($("n-anzahl").value, 10) || 1));
   const id = speicherId ??= neueId();
