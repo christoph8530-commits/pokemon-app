@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.25 (06.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.26 (07.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -104,7 +104,30 @@ function richtpreis(e) {
 }
 // Marktwert einer beliebigen Karte live von TCGdex (Median aus Trend, 7- und 30-Tage-Schnitt).
 // Varianten: Reverse Holo = Glitzerpreis derselben Karte; Pokéball/Meisterball = eigenes Produkt, dessen Glitzerpreis.
+// Mittelwert aus Trend, 7- und 30-Tage-Schnitt (der mittlere der vorhandenen Werte)
+function mittelPreis(werte) {
+  const w = werte.filter(x => x > 0).sort((a, b) => a - b);
+  return w.length ? Math.round((w.length % 2 ? w[(w.length - 1) / 2] : (w[w.length / 2 - 1] + w[w.length / 2]) / 2) * 100) / 100 : null;
+}
+// Zweite Quelle, wenn TCGdex keinen Preis hat (z. B. Wizards-Promos): Cardmarket-Preise über pokemontcg.io
+async function ersatzPreis(id, variante) {
+  const m = String(id).match(/^(.+)-0*([A-Za-z]*\d+)$/);
+  if (!m) return null;
+  try {
+    const url = `https://api.pokemontcg.io/v2/cards?q=set.id:${encodeURIComponent(m[1])}%20number:${encodeURIComponent(m[2])}&select=id,cardmarket`;
+    let d = null;
+    for (let versuch = 0; versuch < 4 && !d; versuch++)   // pokemontcg.io antwortet oft erst beim zweiten oder dritten Mal
+      d = await fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+    const p = d?.data?.[0]?.cardmarket?.prices;
+    if (!p) return null;
+    return variante === "reverse" ? mittelPreis([p.reverseHoloTrend, p.reverseHoloAvg7, p.reverseHoloAvg30])
+         : variante === "normal" ? mittelPreis([p.trendPrice, p.avg7, p.avg30]) : null;
+  } catch (e) { return null; }
+}
 async function livePreis(id, variante = "normal") {
+  return (await tcgdexPreis(id, variante)) ?? (await ersatzPreis(id, variante));
+}
+async function tcgdexPreis(id, variante) {
   try {
     const d = await fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null);
     let c = d?.pricing?.cardmarket || {}, glitzer = false;
@@ -115,8 +138,7 @@ async function livePreis(id, variante = "normal") {
       glitzer = true;
     }
     const f = k => c[glitzer ? k + "-holo" : k];
-    const w = [f("trend"), f("avg7"), f("avg30")].filter(x => x > 0).sort((a, b) => a - b);
-    return w.length ? Math.round((w.length % 2 ? w[(w.length - 1) / 2] : (w[w.length / 2 - 1] + w[w.length / 2]) / 2) * 100) / 100 : null;
+    return mittelPreis([f("trend"), f("avg7"), f("avg30")]);
   } catch (e) { return null; }
 }
 
