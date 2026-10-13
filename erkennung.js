@@ -25,6 +25,8 @@ Bestimme die Karte genau:
   z. B. "MEE", "CRI", "POR", "SVI"; Basis-Energien der Mega-Entwicklung-Serie tragen "MEE"), sonst leer. Nur angeben, was wirklich aufgedruckt ist.
 - sprache: Sprache des aufgedruckten Kartentexts: DE, EN, FR, IT, ES, PT, NL, JP, KO, ZH oder andere. Achte auf die Wörter,
   nicht auf einzelne Begriffe: "Énergie … de base" = FR, "Basis-…-Energie" = DE, "Basic … Energy" = EN.
+  Bei Energiekarten steht der Typ oft nur als Symbol im Namen (z. B. Blatt = Pflanze/Grass, Faust = Kampf/Fighting,
+  Dreieck = Metall/Metal) – schreibe den Typ dann aus, z. B. name "Basis-Pflanzen-Energie", name_en "Basic Grass Energy".
   Bei neueren Karten steht die Sprache auch neben dem Set-Kürzel (z. B. "MEE FR").
 - erste_auflage: nur true, wenn in Bild 2 deutlich ein Stempel "Edition 1" bzw. "1st Edition" (schwarzer Kreis/Rahmen
   mit einer 1) zu erkennen ist. Ein Schatten, Holo-Glanz oder Text ist kein Stempel.
@@ -194,6 +196,13 @@ export function kandidaten(r, index) {
     // passtVoll: Nummer UND Gesamtzahl stimmen (z. B. 130/132) – dann hat das gegen das Bild Vorrang
     liste.push({ p, id: k.id, passt: nrOk && totOk && name >= 0.95,
                  passtVoll: nrOk && (totG != null && totOk || kuerzelOk) && name >= 0.95, bild: 0, hatBild: !!k.bild });
+  }
+  // Kürzel + Nummer bestimmen die Karte auch ohne passenden Namen – z. B. Energien, deren Typ nur als Symbol
+  // im Namen steht („Basis-🍃-Energie“), sodass Gemini den Namen nicht vollständig lesen kann
+  if (kuerzel && nrG) {
+    const da = new Set(liste.map(x => x.id));
+    const treffer = index.karten.filter(k => index.sets[k.set].kuerzel === kuerzel && nrPasst(k.nr) && !da.has(k.id));
+    for (const k of treffer) liste.push({ p: 3.1, id: k.id, passt: true, passtVoll: treffer.length === 1, bild: 0, hatBild: !!k.bild });
   }
   liste.sort((a, b) => b.p - a.p);
   return ohneDoppelte(liste).slice(0, 8);
