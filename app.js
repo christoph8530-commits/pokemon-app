@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.30 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.31 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -196,6 +196,9 @@ function dlgName(id, de) {
   const n = kartenName({ id, sprache: $("n-sprache").value, name: de });
   return n.unter ? `${n.titel} (${n.unter})` : n.titel;
 }
+// Aufbewahrung: ab 30 € Toploader, ab 10 € oder 1. Auflage zuerst in eine Penny-Hülle (wie im Binder-Plan)
+const schutzVon = e => (e.preis || 0) >= 30 ? "top" : (e.preis || 0) >= 10 || e.auflage === "1. Auflage" ? "huelle" : "";
+const SCHUTZ_TEXT = { top: "Toploader", huelle: "Hülle" };
 function trifft(e, suche) {
   if (!suche || [e.name, e.nummer, setName(e.set), e.seltenheit, e.sprache, e.auflage, e.holo ? "holo" : ""].join(" ").toLowerCase().includes(suche)) return true;
   // auch englische, französische, italienische … Namen aus dem Kartenverzeichnis („Capumain“ findet Griffel)
@@ -232,7 +235,7 @@ function sammlung(inv, fehlt) {
       <span class="bild">${bildHtml(bildVon(e), e.name)}</span>
       ${e.anzahl > 1 ? `<span class="stueck">×${e.anzahl}</span>` : ""}${e.neu || e.zugang ? `<span class="marke neu">Neu</span>` : ""}
       <span class="info"><span class="k-titel">${esc(kartenName(e).titel)}</span>${kartenName(e).unter ? `<span class="meta">${esc(kartenName(e).unter)}</span>` : ""}<span class="meta">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> ${e.symbol}</span>
-      <span class="chips"><span class="chip">${esc(e.sprache)}</span>${e.holo ? `<span class="chip gelb">Holo</span>` : ""}${e.auflage === "1. Auflage" ? `<span class="chip gelb">1. Aufl.</span>` : ""}${VARIANTE_KURZ[e.variante] ? `<span class="chip gelb">${VARIANTE_KURZ[e.variante]}</span>` : ""}</span>
+      <span class="chips"><span class="chip">${esc(e.sprache)}</span>${e.holo ? `<span class="chip gelb">Holo</span>` : ""}${e.auflage === "1. Auflage" ? `<span class="chip gelb">1. Aufl.</span>` : ""}${VARIANTE_KURZ[e.variante] ? `<span class="chip gelb">${VARIANTE_KURZ[e.variante]}</span>` : ""}${schutzVon(e) ? `<span class="chip schutz${schutzVon(e) === "top" ? " top" : ""}">${SCHUTZ_TEXT[schutzVon(e)]}</span>` : ""}</span>
       <span class="preis">${eur(e.preis)}</span></span>
     </button>`).join("") : `<div class="leer">Keine Karte passt zu diesen Filtern.</div>`;
 }
@@ -296,7 +299,7 @@ function binderPlan(inv) {
   const besitz = new Map();
   for (const e of inv) { const k = `${e.set}|${nrVon(e)}`; if (!besitz.has(k)) besitz.set(k, []); besitz.get(k).push(e); }
   const bestes = l => [...l].sort((a, b) => (a.auflage !== "1. Auflage") - (b.auflage !== "1. Auflage") || (a.sprache !== "DE") - (b.sprache !== "DE") || (b.preis || 0) - (a.preis || 0))[0];
-  const schutz = e => (e.preis || 0) >= 30 ? "top" : (e.preis || 0) >= 10 || e.auflage === "1. Auflage" ? "huelle" : "";
+  const schutz = schutzVon;
   const fach = (e, n) => { const k = kartenName(e); return { nr: n, hat: true, e, name: k.titel, de: k.unter, schutz: schutz(e) }; };
   const im = new Set();
   const alben = ALBEN.map(([titel, liste]) => [titel, liste.filter(s => s !== "basep" || inv.some(e => e.set === s)).map(s => {
@@ -444,6 +447,8 @@ function zeigeKarte(key) {
   $("k-info").innerHTML = `${n.unter ? `<div>Deutsch: ${esc(n.unter)}</div>` : ""}<div class="muted">${esc(setName(e.set))} · <span class="mono">${esc(e.nummer)}</span> · ${esc(e.sprache)} · ${esc(e.auflage)}${VARIANTE_KURZ[e.variante] ? " · " + VARIANTE[e.variante] : ""}${e.seltenheit ? " · " + esc(e.seltenheit) : ""}</div>
     <div>${teile.join(" · ")}</div>
     <div>Marktwert <strong class="num">${eur(e.preis)}</strong> pro Stück${richtpreis(e) ? ` · Angebotspreis ca. <strong class="num">${eur(richtpreis(e))}</strong>` : ""}</div>
+    ${schutzVon(e) === "top" ? `<div><strong>Aufbewahrung:</strong> in eine Penny-Hülle und dann in einen Toploader – nicht in den Binder, in die Box ganz vorne.</div>`
+      : schutzVon(e) === "huelle" ? `<div><strong>Aufbewahrung:</strong> zuerst in eine Penny-Hülle, dann in den Binder.</div>` : ""}
     <div><a href="${cm(e.name)}" target="_blank" rel="noopener">Auf Cardmarket ansehen</a></div>`;
   $("k-aktionen").innerHTML = schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "";
   if (schreibbar) {
