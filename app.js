@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.31 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.32 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -426,9 +426,17 @@ document.querySelectorAll("[data-stufe]").forEach(b => b.addEventListener("click
 $("sets").addEventListener("click", zeigeSet);
 $("weitere-sets").addEventListener("click", zeigeSet);
 function zeigeSet(e) {   // Set antippen: in der Sammlung als Checkliste zeigen
-  const b = e.target.closest("[data-set]"); if (!b) return;
-  $("s-set").value = b.dataset.set; $("s-sprache").value = ""; $("s-doppelt").checked = false; $("s-fehlend").checked = true; $("s-sort").value = "set";
+  const b = e.target.closest("[data-set]"); if (b) setInSammlung(b.dataset.set);
+}
+// Set in der Sammlung als Checkliste zeigen; mit key: zur Karte scrollen und sie kurz hervorheben
+function setInSammlung(set, key) {
+  $("s-set").value = set;
+  if ($("s-set").value !== set) $("s-set").value = "anderes";   // Set ohne eigenen Eintrag im Filter
+  $("suche").value = ""; $("s-sprache").value = ""; $("s-doppelt").checked = false; $("s-fehlend").checked = true; $("s-sort").value = "set";
   alles(); zeigeTab("sammlung");
+  const k = key && [...document.querySelectorAll("#s-raster [data-key]")].find(b => b.dataset.key === key);
+  // nach dem Schließen des Dialogs (der den Fokus zurücksetzt) zur Karte scrollen
+  if (k) setTimeout(() => { k.scrollIntoView({ block: "center" }); k.classList.add("markiert"); setTimeout(() => k.classList.remove("markiert"), 2500); }, 80);
 }
 
 // ---------- Dialoge ----------
@@ -450,7 +458,9 @@ function zeigeKarte(key) {
     ${schutzVon(e) === "top" ? `<div><strong>Aufbewahrung:</strong> in eine Penny-Hülle und dann in einen Toploader – nicht in den Binder, in die Box ganz vorne.</div>`
       : schutzVon(e) === "huelle" ? `<div><strong>Aufbewahrung:</strong> zuerst in eine Penny-Hülle, dann in den Binder.</div>` : ""}
     <div><a href="${cm(e.name)}" target="_blank" rel="noopener">Auf Cardmarket ansehen</a></div>`;
-  $("k-aktionen").innerHTML = schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "";
+  $("k-aktionen").innerHTML = `<button type="button" class="knopf" id="k-set">Set „${esc(setName(e.set))}“ ansehen</button>` +
+    (schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "");
+  $("k-set").onclick = () => { $("dlg-karte").close(); setInSammlung(e.set, e.key); };
   if (schreibbar) {
     $("k-mehr").onclick = () => { $("dlg-karte").close(); oeffneNeu({ set: e.set, nr: e.nr, sprache: e.sprache, auflage: e.auflage, variante: e.variante, id: e.id }); };
     $("k-verkauf").onclick = () => { $("dlg-karte").close(); oeffneVerkauf(e); };
