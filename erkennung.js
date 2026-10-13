@@ -2,7 +2,11 @@
 // (Name zuerst, Nummer/Gesamtzahl/Set entscheiden), vergleicht die Bilder und fragt bei
 // Mehrdeutigkeit mit Kandidatenbildern nach. Ablauf und Schwellen wie im Test an 290 Karten.
 
-export const MODELL = "gemini-flash-lite-latest";   // Alias: rückt automatisch auf die neueste Version nach
+// Festes Modell: der Alias „latest“ zeigte ab Oktober 2026 auf ein neues Modell, das 3–4× langsamer war und öfter überlastet
+// (Vergleich an 16 eigenen Karten: 3.1 15/16 richtig in Ø 4,5 s, latest 12/16 in Ø 15 s). Gibt es das feste Modell nicht mehr
+// oder ist es überlastet, springt der Alias ein.
+export const MODELL = "gemini-3.1-flash-lite";
+export const MODELL_ERSATZ = "gemini-flash-lite-latest";
 export const haken = { gemini: null };              // zum Testen: Gemini-Aufruf ersetzen
 const BILDER = "https://assets.tcgdex.net/";
 
@@ -317,6 +321,13 @@ export class GeminiFehler extends Error {
   constructor(code, text) { super(text); this.code = code; }
 }
 export async function gemini(schluessel, teile, schema, modell = MODELL) {
+  try { return await geminiEinmal(schluessel, teile, schema, modell); }
+  catch (e) {
+    if (modell !== MODELL || !["ueberlastet", "fehler"].includes(e?.code)) throw e;
+    return geminiEinmal(schluessel, teile, schema, MODELL_ERSATZ);
+  }
+}
+async function geminiEinmal(schluessel, teile, schema, modell) {
   let antwort;
   try {
     antwort = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modell}:generateContent`, {
