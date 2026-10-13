@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.29 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.30 (13.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -123,6 +123,26 @@ async function ersatzPreis(id, variante) {
     return variante === "reverse" ? mittelPreis([p.reverseHoloTrend, p.reverseHoloAvg7, p.reverseHoloAvg30])
          : variante === "normal" ? mittelPreis([p.trendPrice, p.avg7, p.avg30]) : null;
   } catch (e) { return null; }
+}
+// Gibt es die vorgeschlagene Glitzer-Variante bei dieser Karte überhaupt? Manche Sets haben keine Reverse Holos
+// (z. B. „30 Jahre“: dort glitzern Pikachu & Co. immer) – dann zurück auf „Standard“, sonst fehlt der Preis.
+const VARIANTEN_CACHE = {};
+async function variantenVon(id) {
+  if (!(id in VARIANTEN_CACHE)) {
+    VARIANTEN_CACHE[id] = fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null)
+      .then(d => d?.variants_detailed ? d.variants_detailed.map(v => v.foil === "masterball" ? "meisterball" : v.foil === "pokeball" ? "pokeball"
+        : v.type === "reverse" ? "reverse" : "normal") : null).catch(() => null);
+  }
+  return VARIANTEN_CACHE[id];
+}
+async function pruefeVariante(id) {
+  const va = $("n-variante").value;
+  if (!id || !VARIANTE_KURZ[va]) return;
+  const vs = await variantenVon(kanonisch(id));
+  if (vs && !vs.includes(va) && $("n-variante").value === va && gewaehlt()?.id === kanonisch(id)) {
+    $("n-variante").value = "normal"; zeigeBesitz();
+    toast(`${VARIANTE[va]} gibt es bei dieser Karte nicht – auf „Standard“ gestellt.`);
+  }
 }
 async function livePreis(id, variante = "normal") {
   return (await tcgdexPreis(id, variante)) ?? (await ersatzPreis(id, variante));
@@ -725,6 +745,7 @@ function zeigeErkennung(ohneKI = false) {
       $("n-sprache").value = SPRACHE[r.sprache] && r.sprache !== "andere" ? r.sprache : "andere";
       $("n-auflage").value = r.erste_auflage ? "1. Auflage" : "normal";
       $("n-variante").value = VARIANTE_VON_GEMINI[r.glitzer] || "normal";
+      pruefeVariante(erkennung.tipp[0]);
       if ($("n-set").value === "anderes") fuelleKarten();   // Namen in der erkannten Sprache
     }
     zeigeBesitz(); zeigeStempel();
