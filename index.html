@@ -184,13 +184,24 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .chip.schutz { border-color: var(--frame); color: #000; background: var(--frame); }
 .chip.schutz.top { border-color: var(--teuer); background: var(--teuer); color: #fff; }
 .karte.markiert { outline: 3px solid var(--accent); outline-offset: 2px; transition: outline-color 0.4s; }
+.kopf-knoepfe { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.hilfe { display: grid; gap: 12px; font-size: 0.95rem; line-height: 1.45; }
+.hilfe h3 { margin: 6px 0 0; font-size: 1.02rem; }
+.hilfe p, .hilfe ul { margin: 0; }
+.hilfe ul { padding-left: 1.2em; display: grid; gap: 4px; }
+.hilfe .beispiele { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hilfe figure { margin: 0; display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+.hilfe figure img { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 8px; background: var(--line); }
+.hilfe figure strong { color: var(--ink); }
+.hilfe .schema { font-family: var(--mono); font-size: 0.8rem; white-space: pre; overflow-x: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.hilfe .merksatz { padding: 8px 10px; border-left: 4px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="kopfzeile"><div class="eyebrow">Sammlung · Karten von 1999 bis 2001</div><button type="button" class="zu" id="einstellungen-knopf" aria-label="Einstellungen">⚙ Einstellungen</button></div>
+    <div class="kopfzeile"><div class="eyebrow">Sammlung · Karten von 1999 bis 2001</div><div class="kopf-knoepfe"><button type="button" class="zu" id="hilfe-knopf">? Karten erkennen</button><button type="button" class="zu" id="einstellungen-knopf" aria-label="Einstellungen">⚙ Einstellungen</button></div></div>
     <h1>Pokémon-Sammlung</h1>
     <div class="status" id="status"><span class="punkt"></span><span id="status-text">Lädt die Sammlung …</span></div>
   </header>
@@ -346,6 +357,55 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     <div class="pruefliste" id="e-ergebnis"></div>
     <div class="dlg-fuss"><button type="button" class="knopf gefahr" id="e-vergessen">Schlüssel entfernen</button><button type="submit" class="knopf voll" id="e-speichern">Speichern und prüfen</button></div>
   </form>
+</dialog>
+<dialog id="dlg-hilfe" aria-labelledby="h-titel">
+  <div class="dlg">
+    <div class="dlg-kopf"><h2 id="h-titel">Karten erkennen: alt oder neu?</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="hilfe">
+      <div class="beispiele">
+        <figure><img id="h-bild-alt" alt="Beispiel einer Wizards-Karte"><figcaption><strong>Alt (Wizards, 1999–2003)</strong><br><span id="h-text-alt">Pikachu, Dschungel 60/64</span></figcaption></figure>
+        <figure><img id="h-bild-neu" alt="Beispiel einer modernen Karte"><figcaption><strong>Modern (ab 2023)</strong><br>Glutexo, Paldeas Schicksale PAF 008/091 <span class="muted">(Bild englisch: HP statt KP)</span></figcaption></figure>
+      </div>
+
+      <h3>In 3 Sekunden: wie alt ist die Karte?</h3>
+      <ul>
+        <li><strong>Rand silber/grau</strong> → ab 2023 (Karmesin &amp; Purpur, Mega). <strong>Rand gelb</strong> → älter, weiter mit den KP.</li>
+        <li><strong>„50 KP“</strong> – große rote Zahl, KP <em>dahinter</em> → <strong>Wizards</strong>. <strong>„KP 60“</strong> – kleines KP <em>davor</em> → modern.</li>
+        <li><strong>Unten „LV. 14 Nr. 25“</strong> und in der Copyright-Zeile <strong>„Wizards“</strong> → Wizards. Moderne Karten haben kein LV.</li>
+        <li><strong>Bild</strong>: Wizards hat einen dicken farbigen Bildrahmen auf gemustertem Hintergrund (Dschungel: Steinmuster). Modern: dünner Silberrahmen, Farbverlauf je nach Typ.</li>
+        <li><strong>Rückseite hilft nicht</strong> – seit 1999 gleich. Nur alte japanische Karten haben eine andere.</li>
+      </ul>
+
+      <h3>Wo steht das Set?</h3>
+      <p><strong>Moderne Karten</strong> (ab 2023): links unten, gleich neben der Nummer.</p>
+      <div class="schema">[G] [PAF]  008/091 ◆</div>
+      <ul>
+        <li><strong>G</strong> – Regulierungsmarke (Buchstabe im Kästchen)</li>
+        <li><strong>PAF</strong> – Set-Kürzel, hier Paldeas Schicksale</li>
+        <li><strong>008/091</strong> – Nummer / Karten im Set</li>
+        <li><strong>◆</strong> – Seltenheit: ● häufig, ◆ ungewöhnlich, ★ selten</li>
+      </ul>
+      <p>Das Kürzel kannst du direkt in die Nummernsuche eingeben, z. B. <span class="mono">PAF 008</span> oder <span class="mono">MEE 007</span>.</p>
+      <p><strong>Schwert &amp; Schild</strong> (2020–2022): links unten ein kleines Set-Symbol statt Kürzel, dazu der Buchstabe <strong>D, E</strong> oder <strong>F</strong>.<br>
+         <strong>Regulierungsmarke</strong>: D–F = Schwert &amp; Schild, G und später = Karmesin &amp; Purpur / Mega. Kein Buchstabe = vor 2020.</p>
+      <p><strong>Wizards-Karten</strong>: Das Set-Symbol sitzt <strong>rechts unter dem Bild</strong>, die Nummer (z. B. 60/64) rechts unten.</p>
+      <p>Am schnellsten erkennst du das Set an der <strong>Zahl hinter dem Schrägstrich</strong>:</p>
+      <ul>
+        <li><strong>…/102</strong> → Grundset (kein Set-Symbol)</li>
+        <li><strong>…/64</strong> → Dschungel (Blumen-Symbol)</li>
+        <li><strong>…/62</strong> → Fossil</li>
+        <li><strong>…/82</strong> → Team Rocket (R-Symbol)</li>
+        <li><strong>…/132</strong> → Gym Heroes oder Gym Challenge</li>
+        <li><strong>…/111</strong> → Neo Genesis</li>
+        <li><strong>nur eine Nummer, schwarzer Stern „Promo“</strong> → Wizards-Promo</li>
+      </ul>
+
+      <h3>1. Auflage (Wizards)</h3>
+      <p>Deutsche Karten: Stempel <strong>„Edition 1“</strong> links unter dem Bild. Englische: schwarzer Stempel <strong>„Edition 1“</strong> mit der 1 im Kreis. Kein Stempel = normale Auflage.</p>
+
+      <div class="merksatz"><strong>Merksatz:</strong> „KP“ hinter der Zahl und „Wizards“ ganz unten = alt. Alles andere ist modern.</div>
+    </div>
+  </div>
 </dialog>
 <script type="module" src="app.js"></script>
 </body>

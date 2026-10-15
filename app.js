@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.33 (14.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.34 (15.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -933,6 +933,17 @@ function oeffneEinstellungen() {
   $("dlg-einstellungen").showModal();
 }
 $("einstellungen-knopf").addEventListener("click", oeffneEinstellungen);
+
+// ---------- Hilfe: alte und moderne Karten unterscheiden ----------
+// Beispiel alt: eigenes Foto vom Dschungel-Pikachu, sonst das Bild aus dem Verzeichnis
+$("hilfe-knopf").addEventListener("click", () => {
+  const alt = [...inventar().values()].find(e => e.set === "base2" && e.nr === 60);
+  const ref = setBild("base2", 60), altBild = (alt && bildVon(alt)) || ref;
+  $("h-text-alt").textContent = altBild !== ref ? "Pikachu, Dschungel 60/64 – dein Foto" : "Pikachu, Dschungel 60/64 (Bild englisch: HP statt KP; links unter dem Bild der 1.-Auflage-Stempel)";
+  const neuBild = setBild("sv04.5", 8, "sv04.5-008");
+  for (const [id, src] of [["h-bild-alt", altBild], ["h-bild-neu", neuBild]]) { $(id).hidden = !src; if (src) $(id).src = src; }
+  $("dlg-hilfe").showModal();
+});
 $("e-vergessen").addEventListener("click", () => {
   for (const k of ["token", "gemini"]) { EINST[k] = ""; merke(k, ""); }
   $("e-token").value = ""; $("e-gemini").value = "";
