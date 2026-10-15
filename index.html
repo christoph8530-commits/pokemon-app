@@ -194,6 +194,15 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .hilfe figure img { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 8px; background: var(--line); }
 .hilfe figure strong { color: var(--ink); }
 .hilfe .schema { font-family: var(--mono); font-size: 0.8rem; white-space: pre; overflow-x: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.hilfe .suche-k { font: inherit; font-size: 1rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.kuerzel-liste { display: grid; gap: 2px; font-size: 0.9rem; }
+.kuerzel-liste .zeile { display: grid; grid-template-columns: 4.6em 1fr auto; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 6px; }
+.kuerzel-liste .zeile:nth-child(odd) { background: var(--bg); }
+.kuerzel-liste .serie { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 6px 2px; }
+.kuerzel-liste .mono { font-weight: 700; }
+.kuerzel-liste .hat { font-size: 0.75rem; color: var(--ok, var(--accent)); white-space: nowrap; }
+.hilfe .marken { display: grid; grid-template-columns: 2.2em 1fr; gap: 4px 8px; font-size: 0.92rem; }
+.hilfe .marken b { font-family: var(--mono); text-align: center; border: 1.5px solid var(--ink); border-radius: 4px; height: 1.5em; line-height: 1.4em; }
 .hilfe .merksatz { padding: 8px 10px; border-left: 4px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
@@ -364,7 +373,7 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     <div class="hilfe">
       <div class="beispiele">
         <figure><img id="h-bild-alt" alt="Beispiel einer Wizards-Karte"><figcaption><strong>Alt (Wizards, 1999–2003)</strong><br><span id="h-text-alt">Pikachu, Dschungel 60/64</span></figcaption></figure>
-        <figure><img id="h-bild-neu" alt="Beispiel einer modernen Karte"><figcaption><strong>Modern (ab 2023)</strong><br>Glutexo, Paldeas Schicksale PAF 008/091 <span class="muted">(Bild englisch: HP statt KP)</span></figcaption></figure>
+        <figure><img id="h-bild-neu" alt="Beispiel einer modernen Karte"><figcaption><strong>Modern (ab 2023)</strong><br><span id="h-text-neu">Glutexo, Paldeas Schicksale PAF 008/091 (Bild englisch: HP statt KP)</span></figcaption></figure>
       </div>
 
       <h3>In 3 Sekunden: wie alt ist die Karte?</h3>
@@ -399,6 +408,23 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
         <li><strong>…/111</strong> → Neo Genesis</li>
         <li><strong>nur eine Nummer, schwarzer Stern „Promo“</strong> → Wizards-Promo</li>
       </ul>
+
+      <h3>Regulierungsmarke: welcher Buchstabe wann?</h3>
+      <p>Der Buchstabe im Kästchen links unten zeigt, aus welchem Jahr die Karte ungefähr stammt:</p>
+      <div class="marken">
+        <b>D</b><span><strong>2020</strong> · Schwert &amp; Schild, Clash der Rebellen, Flammende Finsternis, Weg des Champs, Farbenschock</span>
+        <b>E</b><span><strong>2021</strong> · Glänzendes Schicksal, Kampfstile, Schaurige Herrschaft, Drachenwandel, Fusionsangriff</span>
+        <b>F</b><span><strong>2022</strong> · Strahlende Sterne, Astralglanz, Pokémon GO, Verlorener Ursprung, Silberne Sturmwinde, Zenit der Könige</span>
+        <b>G</b><span><strong>2023</strong> · Karmesin &amp; Purpur bis Paldeas Schicksale (u. a. Obsidianflammen, 151, Paradoxrift)</span>
+        <b>H</b><span><strong>2024</strong> · Gewalten der Zeit bis Prismatische Entwicklungen</span>
+        <b>I</b><span><strong>2025</strong> · ab Reisegefährten, dazu die ersten Mega-Sets. Neuere Sets bekommen den nächsten Buchstaben.</span>
+      </div>
+      <p class="muted">Ohne Buchstabe: vor 2020. Einzelne Karten können einen Buchstaben früher tragen, wenn sie nachgedruckt wurden.</p>
+
+      <h3>Set-Kürzel: welches Set ist das?</h3>
+      <p>Seit 2023 steht das Kürzel aufgedruckt links unten. ✓ = davon hast du schon Karten.</p>
+      <input class="suche-k" id="h-filter" type="search" autocomplete="off" spellcheck="false" placeholder="Kürzel oder Name suchen, z. B. PAF">
+      <div class="kuerzel-liste" id="h-kuerzel"></div>
 
       <h3>1. Auflage (Wizards)</h3>
       <p>Deutsche Karten: Stempel <strong>„Edition 1“</strong> links unter dem Bild. Englische: schwarzer Stempel <strong>„Edition 1“</strong> mit der 1 im Kreis. Kein Stempel = normale Auflage.</p>

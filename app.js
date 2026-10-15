@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.34 (15.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.35 (15.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -935,14 +935,60 @@ function oeffneEinstellungen() {
 $("einstellungen-knopf").addEventListener("click", oeffneEinstellungen);
 
 // ---------- Hilfe: alte und moderne Karten unterscheiden ----------
-// Beispiel alt: eigenes Foto vom Dschungel-Pikachu, sonst das Bild aus dem Verzeichnis
+// Beispielbilder: am liebsten eigene Fotos (alt: Dschungel-Pikachu, modern: eine Karte aus Karmesin & Purpur oder Mega),
+// sonst das Bild aus dem Verzeichnis. Lädt ein Bild nicht, kommt das Ersatzbild bzw. das Bild wird ausgeblendet.
+const MODERN = ["Scarlet & Violet", "Mega Evolution"];
+const SPRACH_KP = { EN: "HP", FR: "PV", IT: "PS", ES: "PS", PT: "PS" };
+async function eigenesFoto(e) {
+  if (!e) return null;
+  if (FOTOS[e.key]) return FOTOS[e.key];
+  if (!e.foto) return null;
+  if (FOTOURL[e.foto] && FOTOURL[e.foto] !== "laedt") return FOTOURL[e.foto];
+  try { const b = await speicher?.fotoLesen(e.foto); if (b) return (FOTOURL[e.foto] = URL.createObjectURL(b)); } catch (x) {}
+  return null;
+}
+function hilfeBild(id, src, ersatz) {
+  const img = $(id);
+  img.onerror = () => { if (ersatz && img.src !== ersatz) img.src = ersatz; else img.hidden = true; };
+  img.hidden = !(src || ersatz);
+  if (src || ersatz) img.src = src || ersatz;
+}
+function kpHinweis(sprache) { return SPRACH_KP[sprache] ? ` (${sprache}: ${SPRACH_KP[sprache]} statt KP)` : ""; }
+async function hilfeBeispiele() {
+  let inv = [];
+  try { inv = [...inventar().values()]; } catch (x) {}   // ohne Verbindung zum Repo gibt es noch keine Sammlung
+  const alt = inv.find(e => e.set === "base2" && e.nr === 60 && e.sprache === "DE") || inv.find(e => e.set === "base2" && e.nr === 60);
+  const altFoto = await eigenesFoto(alt);
+  hilfeBild("h-bild-alt", altFoto, setBild("base2", 60));
+  $("h-text-alt").textContent = altFoto ? `Pikachu, Dschungel 60/64 – dein Foto${kpHinweis(alt.sprache)}`
+    : "Pikachu, Dschungel 60/64 (Bild englisch: HP statt KP; links unter dem Bild der 1.-Auflage-Stempel)";
+  const modern = inv.filter(e => MODERN.includes(IDX?.sets[e.set]?.serie) && (FOTOS[e.key] || e.foto) && !/energie/i.test(e.name));
+  const neu = modern.find(e => e.sprache === "DE") || modern[0];
+  const neuFoto = await eigenesFoto(neu);
+  hilfeBild("h-bild-neu", neuFoto, setBild("sv04.5", 8, "sv04.5-008"));
+  $("h-text-neu").textContent = neuFoto
+    ? `${kartenName(neu).titel}, ${setName(neu.set)} ${IDX?.sets[neu.set]?.kuerzel || ""} ${neu.nummer} – dein Foto${kpHinweis(neu.sprache)}`
+    : "Glutexo, Paldeas Schicksale PAF 008/091 (Bild englisch: HP statt KP)";
+}
+// Liste der aufgedruckten Set-Kürzel (Karmesin & Purpur und Mega), neueste zuerst
+function kuerzelListe() {
+  const such = norm($("h-filter").value.trim());
+  let eigene = new Set();
+  try { eigene = new Set([...inventar().values()].map(e => e.set)); } catch (x) {}
+  const sets = Object.values(IDX?.sets || {}).filter(s => MODERN.includes(s.serie) && s.kuerzel).reverse()
+    .filter(s => !such || norm(s.kuerzel).includes(such) || norm(s.name_de || "").includes(such) || norm(s.name).includes(such));
+  let html = "", serie = "";
+  for (const s of sets) {
+    if (s.serie !== serie) { serie = s.serie; html += `<div class="serie">${serie === "Mega Evolution" ? "Mega-Entwicklung (ab 2025)" : "Karmesin & Purpur (2023–2025)"}</div>`; }
+    html += `<div class="zeile"><span class="mono">${esc(s.kuerzel)}</span><span>${esc(s.name_de || s.name)} <span class="muted">· ${s.offiziell} Karten</span></span>${eigene.has(s.id) ? `<span class="hat">✓ hast du</span>` : "<span></span>"}</div>`;
+  }
+  $("h-kuerzel").innerHTML = html || `<div class="muted">Kein Set gefunden.</div>`;
+}
+$("h-filter").addEventListener("input", kuerzelListe);
 $("hilfe-knopf").addEventListener("click", () => {
-  const alt = [...inventar().values()].find(e => e.set === "base2" && e.nr === 60);
-  const ref = setBild("base2", 60), altBild = (alt && bildVon(alt)) || ref;
-  $("h-text-alt").textContent = altBild !== ref ? "Pikachu, Dschungel 60/64 – dein Foto" : "Pikachu, Dschungel 60/64 (Bild englisch: HP statt KP; links unter dem Bild der 1.-Auflage-Stempel)";
-  const neuBild = setBild("sv04.5", 8, "sv04.5-008");
-  for (const [id, src] of [["h-bild-alt", altBild], ["h-bild-neu", neuBild]]) { $(id).hidden = !src; if (src) $(id).src = src; }
+  $("h-filter").value = ""; kuerzelListe();
   $("dlg-hilfe").showModal();
+  hilfeBeispiele();
 });
 $("e-vergessen").addEventListener("click", () => {
   for (const k of ["token", "gemini"]) { EINST[k] = ""; merke(k, ""); }
