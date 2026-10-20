@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.36 (15.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.37 (20.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -294,7 +294,9 @@ function sets(inv, fehlt) {
 // ---------- Binder-Plan: welche Karte in welches Fach (2 Alben mit 9 Fächern pro Seite, je 60 Seiten) ----------
 // Wie katalog/binder_plan.py: jedes Set auf einer neuen Seite, Nummernfolge, Fächer für fehlende Karten bleiben frei;
 // pro Nummer das beste Exemplar (1. Auflage, dann Deutsch, dann höherer Wert); neuere Karten ohne Lücken.
-const ALBEN = [["Album A", ["base1", "base2", "base3", "base5", "neo1", "basep"]], ["Album B", ["gym1", "gym2"]]];
+// Name, Sets, Farbe (wie die Etiketten auf den echten Alben: katalog/binder_etiketten.py)
+const ALBEN = [["Album A · Klassiker", ["base1", "base2", "base3", "base5", "neo1", "basep"], "rot"],
+               ["Album B · Arenen & Neu", ["gym1", "gym2"], "blau"]];
 const KLEINE_SETS = ["mee", "sve", "mep"];
 // Sammlung „Wie im Binder“: Seiten mit 3×3 Fächern wie im echten Album, fehlende Karten an ihrem Platz.
 // Seitenzahlen zählen immer über das ganze Album – mit Set-Filter stimmen sie also mit dem echten Binder überein.
@@ -303,18 +305,19 @@ function binderAnsicht(inv, set, suche) {
   const { alben, box } = binderPlan(inv);
   const zeigen = ab => !set || ab.sets.includes(set) || (set === "anderes" && ab.sets.some(s => !SETREIHE.includes(s)));
   let html = "", seiten = [];
-  for (const [titel, abschnitte] of alben) {
+  for (const [i, [titel, abschnitte]] of alben.entries()) {
+    const farbe = ALBEN[i][2];
     let nr = 0, teil = "";
     for (const ab of abschnitte) for (let i = 0; i < ab.faecher.length; i += 9) {
       nr++;
       if (!zeigen(ab)) continue;
       const f = ab.faecher.slice(i, i + 9);
       const bereich = ab.luecken ? `Nr. ${f[0].nr}–${f.at(-1).nr} · ` : "";
-      teil += `<section class="b-seite"><header><span><strong>Seite ${nr}</strong> · ${esc(ab.name)}</span><span class="muted">${bereich}${f.filter(x => x.hat).length}/${f.length}</span></header>
+      teil += `<section class="b-seite ${farbe}"><header><span><strong>Seite ${nr}</strong> · ${esc(ab.name)}</span><span class="muted">${bereich}${f.filter(x => x.hat).length}/${f.length}</span></header>
         <div class="b-raster">${f.map(binderKachel).join("")}${'<div class="b-frei"></div>'.repeat(9 - f.length)}</div></section>`;
     }
-    seiten.push(`${titel}: ${nr} von 60 Seiten`);
-    if (teil) html += `<h2 class="b-album">${esc(titel)} <small>· ${nr} von 60 Seiten</small></h2>${teil}`;
+    seiten.push(`${titel.split(" · ")[0]}: ${nr} von 60 Seiten`);
+    if (teil) html += `<h2 class="b-album ${farbe}"><span class="b-buchstabe">${titel.at(6)}</span>${esc(titel.slice(10))} <small>· ${nr} von 60 Seiten</small></h2>${teil}`;
   }
   $("s-treffer").textContent = `${seiten.join(" · ")} · ${box} Doppelte in der Box`;
   $("s-raster").innerHTML = html ? `<div class="binder-ansicht">${html}</div>` : `<div class="leer">Für dieses Set gibt es keine Binder-Seiten.</div>`;
