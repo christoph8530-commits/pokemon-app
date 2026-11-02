@@ -142,6 +142,26 @@ export function nummerInfo(nummer = "") {
 }
 // Eingetipptes Set-Kürzel vor der Nummer: „MEE 007“, „CRI FR 046/086“, „MEE007“.
 // Ohne Leerzeichen nur, wenn die Buchstaben nicht auch Teil von Kartennummern sind (XY01, SV001, TG05 …).
+// „036/86 Psiau“, „Psiau 036/86“, „CRI 036 Psiau“: Nummer (samt Set-Kürzel und Sprache davor) und Name trennen.
+// Ein Wort direkt vor der Nummer gilt als Kürzel, wenn es ein bekanntes Set-Kürzel ist (mitKuerzel = false: nie).
+const SPRACHCODE = /^(DE|EN|FR|IT|ES|PT|NL|JP|KO|ZH)$/i;
+export function nameUndNummer(eingabe, index, mitKuerzel = true) {
+  const t = String(eingabe || "").trim().replace(/\s*\/\s*/g, "/").split(/\s+/).filter(Boolean);
+  const i = t.findIndex(x => /\d/.test(x));
+  if (i < 0) return { nummer: "", name: t.join(" ") };
+  const kuerzel = w => mitKuerzel && !!w && Object.values(index.sets).some(s => s.kuerzel && s.kuerzel === w.toUpperCase());
+  let von = i;
+  if (von > 1 && SPRACHCODE.test(t[von - 1]) && kuerzel(t[von - 2])) von -= 2;
+  else if (von > 0 && kuerzel(t[von - 1])) von -= 1;
+  return { nummer: t.slice(von, i + 1).join(" "), name: t.slice(0, von).concat(t.slice(i + 1)).join(" ") };
+}
+// Name in irgendeiner Sprache (Deutsch, Englisch, Französisch …), auch nur der Anfang: „psia“ passt zu Psiau
+export function passtName(k, name) {
+  const n = norm(name);
+  if (!k || n.length < 3) return false;
+  return [k.nde, k.nen, ...k.nw].some(x => x && (x.includes(n) || (x.length >= 4 && n.includes(x))));
+}
+
 export function nummerMitKuerzel(eingabe, index) {
   const text = String(eingabe || "").trim(), nichts = { nummer: text, kuerzel: null, sets: null, sprache: null };
   let m = text.match(/^([A-Za-z][A-Za-z0-9]{1,4})[\s\-]+(?:([A-Za-z]{2})[\s\-]+)?(\d\S*)$/);
@@ -449,7 +469,8 @@ export async function bestimme(foto, index, schluessel, fortschritt = () => {}, 
 // ---------- Mit eingetippter Nummer neu zuordnen (ohne neue Anfrage an Gemini) ----------
 // alt: bisheriges Ergebnis (Gemini-Antwort und Bild-Fingerabdruck), darf leer sein
 // nurSets: nur in diesen Sets suchen (eingetipptes Kürzel oder von Hand gewähltes Set)
-export async function neuZuordnen(alt, nummer, index, nurSets = null) {
+// opts.name: nur Karten mit diesem Namen; opts.bevorzugt: Map Set → Anzahl eigener Karten (Sets mit vielen Karten zuerst)
+export async function neuZuordnen(alt, nummer, index, nurSets = null, opts = {}) {
   const r = alt?.antwort ? { ...alt.antwort, nummer } : null;
   const imSet = k => !nurSets || nurSets.includes(index.karte(k.id)?.set);
   let kand = r ? kandidaten(r, index).filter(imSet) : [];
@@ -458,6 +479,13 @@ export async function neuZuordnen(alt, nummer, index, nurSets = null) {
     kand = kand.concat(nachNummer(nummer, index).filter(k => !da.has(k.id) && imSet(k)));
   }
   kand = ohneDoppelte(kand);
+  let nameOhneTreffer = false;
+  if (opts.name) {
+    const mitName = kand.filter(k => passtName(index.karte(k.id), opts.name));
+    if (mitName.length) { kand = mitName; if (mitName.length === 1) mitName[0].passtVoll = true; }   // Nummer und Name: eindeutig
+    else nameOhneTreffer = true;
+  }
+  if (opts.bevorzugt) for (const k of kand) { const n = opts.bevorzugt.get(index.karte(k.id)?.set); if (n) k.p += 0.3 + Math.min(n, 50) / 500; }
   if (nurSets && kand.length === 1) kand[0].passtVoll = true;   // Set und Nummer stimmen: eindeutig
   if (alt?.q) await Promise.all(kand.slice(0, 40).map(async k => {
     const ref = await refBild(index.karte(k.id));
@@ -466,8 +494,10 @@ export async function neuZuordnen(alt, nummer, index, nurSets = null) {
   }));
   kand.sort((a, b) => b.p - a.p);
   const eindeutig = kand.length && kand[0].passtVoll && (kand.length < 2 || kand[0].p - kand[1].p >= 0.5);
-  return { antwort: r, tipp: kand.slice(0, 3).map(k => k.id), status: eindeutig ? "ok" : "pruefen",
-           bildaehnlich: kand.slice(0, 3).map(k => k.bild), anfragen: 0, stempel: alt?.stempel, q: alt?.q };
+  const zahl = r ? 3 : 6;                                // nur nach Nummer: bis zu 6 zur Auswahl
+  return { antwort: r, tipp: kand.slice(0, zahl).map(k => k.id), status: eindeutig ? "ok" : "pruefen",
+           bildaehnlich: kand.slice(0, zahl).map(k => k.bild), anfragen: 0, stempel: alt?.stempel, q: alt?.q,
+           anzahl: kand.length, nameOhneTreffer };
 }
 
 // ---------- Ohne KI: nur Bildvergleich (Rückfall, wenn Gemini nicht erreichbar ist) ----------

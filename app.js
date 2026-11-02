@@ -1,6 +1,6 @@
 // Pokémon-Sammlung – eigenständige Web-App (ohne Claude).
 // Daten: privates GitHub-Repo (speicher.js). Erkennung: Gemini + Nachschlagewerk (erkennung.js).
-import { Index, bestimme, nurBild, neuZuordnen, nummerMitKuerzel, haken, kanonisch, norm, ERSTAUFLAGE_SETS } from "./erkennung.js";
+import { Index, bestimme, nurBild, neuZuordnen, nummerMitKuerzel, nameUndNummer, haken, kanonisch, norm, ERSTAUFLAGE_SETS } from "./erkennung.js";
 import { GitHubSpeicher, TestSpeicher, PFADE } from "./speicher.js";
 
 // ---------- Grundlagen ----------
@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.37 (20.10.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.38 (02.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -738,8 +738,26 @@ function zeigeKandidaten() {
   $("n-kandidaten").innerHTML = `<strong>${erkennung.status === "pruefen" ? "Bitte prüfen: Welche Karte ist es?" : "Andere mögliche Karten"}</strong>
     <div class="reihe">${liste.map(id => { const k = IDX.karte(id);
       return `<button type="button" class="kandidat" data-kandidat="${esc(id)}" aria-pressed="false">${bildHtml(k?.bild ? k.bild + "/low.jpg" : null, k?.de)}
-        <span><strong>${esc(k ? dlgName(id, k.de) : id)}</strong><br><span class="muted">${esc(setName(k?.set))} · ${esc(k ? nummerVon(k) : "")}</span></span></button>`; }).join("")}</div>`;
+        <span><strong>${esc(k ? dlgName(id, k.de) : id)}</strong><br><span class="muted">${esc(setName(k?.set))} · ${esc(k ? nummerVon(k) : "")}</span>${aufdruck(k?.set)}</span></button>`; }).join("")}</div>
+    ${erkennung.anzahl > liste.length ? `<span class="muted">${erkennung.anzahl - liste.length} weitere Karten mit dieser Nummer – Name oder Set-Kürzel dazuschreiben grenzt ein (z. B. „036/86 Psiau“ oder „CRI 036“).</span>` : ""}`;
   markiereKandidat();
+}
+// Was links unten auf der Karte steht: Set-Kürzel (seit 2023 aufgedruckt) und Regulierungsmarke (ab 2020)
+// Marke je Set laut TCGdex (Stichproben 15.10.2026); einzelne übernommene Karten können einen älteren Buchstaben tragen
+const REG_MARKE = {
+  swsh1: "D", swsh2: "D", swsh3: "D", "swsh3.5": "D", swsh4: "D", "swsh4.5": "D/E", "swsh4.5sv": "D",
+  swsh5: "E", swsh6: "E", swsh7: "E", cel25: "E", swsh8: "E",
+  swsh9: "F", swsh10: "F", "swsh10.5": "F", swsh11: "F", swsh12: "F", "swsh12.5": "F", "swsh12.5gg": "F",
+  sv01: "G", sv02: "G", sv03: "G", "sv03.5": "G", sv04: "G", "sv04.5": "G",
+  sv05: "H", sv06: "H", "sv06.5": "H", sv07: "H", sv08: "H", "sv08.5": "H",
+  sv09: "I", sv10: "I", "sv10.5w": "I", "sv10.5b": "I", me01: "I", me02: "I", "me02.5": "I/J",
+  me03: "J", me04: "J", me05: "J", "30th": "J",
+};
+function aufdruck(set) {
+  const s = IDX?.sets[set];
+  if (!s) return "";
+  const teile = [MODERN.includes(s.serie) && s.kuerzel ? s.kuerzel : "", REG_MARKE[set] || ""].filter(Boolean);
+  return teile.length ? `<br><span class="aufdruck">${esc(teile.join(" · "))}</span>` : "";
 }
 function markiereKandidat() {
   const g = gewaehlt();
@@ -807,20 +825,30 @@ function zeigeErkennung(ohneKI = false) {
 async function nummerSuchen() {
   const eingabe = $("n-nummer").value.trim();
   if (!eingabe || !IDX) return;
-  // „MEE 007“: Kürzel bestimmt das Set; sonst ein von Hand gewähltes Set
-  const h = nummerMitKuerzel(eingabe, IDX), nurSets = h.sets || (setVonHand ? [setVonHand] : null);
-  if (!nurSets && !erkennung && neuFoto && kannErkennen()) { erkenne(); return; }
+  // „036/86 Psiau“: Name und Nummer trennen; „MEE 007“: Kürzel bestimmt das Set; sonst ein von Hand gewähltes Set
+  let { nummer, name } = nameUndNummer(eingabe, IDX);
+  if (!nummer) { $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Bitte die Nummer mit eingeben, z. B. 036/86 Psiau."; return; }
+  const h = nummerMitKuerzel(nummer, IDX), nurSets = h.sets || (setVonHand ? [setVonHand] : null);
+  if (!nurSets && !name && !erkennung && neuFoto && kannErkennen()) { erkenne(); return; }
+  const eigene = new Map();                            // Set → Anzahl eigener Karten
+  try { for (const e of inventar().values()) eigene.set(e.set, (eigene.get(e.set) || 0) + 1); } catch (x) {}
   const wo = nurSets ? ` in ${nurSets.map(setName).join(" / ")}` : "";
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = `Suche Karten mit dieser Nummer${wo} …`;
-  let neu = await neuZuordnen(erkennung, h.nummer, IDX, nurSets);
-  if (!neu.tipp.length && nurSets) neu = await neuZuordnen(erkennung, eingabe, IDX);   // im Set nichts: überall suchen
-  if (!neu.tipp.length) { $("n-meldung").textContent = `Keine Karte mit der Nummer ${eingabe}${wo} gefunden. Bitte so eingeben, wie sie auf der Karte steht, z. B. 046/086 oder MEE 007.`; return; }
+  const opts = { name, bevorzugt: eigene };
+  let neu = await neuZuordnen(erkennung, h.nummer, IDX, nurSets, opts);
+  if (!neu.tipp.length && h.sets) {                    // Wort vor der Nummer war doch kein Kürzel, sondern Teil des Namens (z. B. „MEW“)
+    ({ nummer, name } = nameUndNummer(eingabe, IDX, false));
+    neu = await neuZuordnen(erkennung, nummer, IDX, setVonHand ? [setVonHand] : null, { ...opts, name });
+  }
+  if (!neu.tipp.length && nurSets) neu = await neuZuordnen(erkennung, nummer, IDX, null, opts);   // im Set nichts: überall suchen
+  if (!neu.tipp.length) { $("n-meldung").textContent = `Keine Karte mit der Nummer ${nummer}${wo} gefunden. Bitte so eingeben, wie sie auf der Karte steht, z. B. 046/086, MEE 007 oder 036/86 Psiau.`; return; }
   erkennung = neu;
   const gemerkt = setVonHand;
   if (!erkennung.antwort && erkennung.tipp.length > 1) erkennung.status = "pruefen";
   zeigeErkennung();
   setVonHand = gemerkt;   // weitere Suche bleibt im gewählten Set
   if (h.sprache && SPRACHE[h.sprache]) { $("n-sprache").value = h.sprache; zeigeBesitz(); }   // „MEE FR 007“
+  if (neu.nameOhneTreffer) $("n-meldung").textContent += ` Kein Name „${name}“ mit dieser Nummer – hier alle Karten mit der Nummer.`;
 }
 $("n-nummer-suchen").addEventListener("click", nummerSuchen);
 $("n-nummer").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); nummerSuchen(); } });
