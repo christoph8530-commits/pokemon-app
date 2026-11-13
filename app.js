@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.39 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.40 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -147,9 +147,26 @@ async function pruefeVariante(id) {
 async function livePreis(id, variante = "normal") {
   return (await tcgdexPreis(id, variante)) ?? (await ersatzPreis(id, variante));
 }
+// Sonderkarten (Nummer über der Setgröße, z. B. Kecleon 117/103) ordnet TCGdex bei neuen Sets oft derselben
+// Cardmarket-Produktnummer zu wie die normale Karte gleichen Namens (Kecleon 083/103) – dann wäre der Preis der
+// der normalen Karte (0,03 € statt ~10 €). Solche Preise gelten als unbekannt.
+const PRODUKT = new Map();   // Karten-ID → Cardmarket-Produktnummer (Promise)
+function produktVon(id) {
+  if (!PRODUKT.has(id)) PRODUKT.set(id, fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null)
+    .then(d => d?.pricing?.cardmarket?.idProduct ?? null).catch(() => null));
+  return PRODUKT.get(id);
+}
+async function geteiltesProdukt(id, produkt) {
+  const k = IDX?.karte(id), s = k && IDX.sets[k.set];
+  if (!produkt || !s?.offiziell || !(parseInt(k.nr, 10) > s.offiziell)) return false;
+  const normale = IDX.karten.filter(x => x.set === k.set && x.en === k.en && parseInt(x.nr, 10) <= s.offiziell);
+  for (const n of normale) if (await produktVon(n.id) === produkt) return true;
+  return false;
+}
 async function tcgdexPreis(id, variante) {
   try {
     const d = await fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null);
+    if (await geteiltesProdukt(id, d?.pricing?.cardmarket?.idProduct)) return null;
     let c = d?.pricing?.cardmarket || {}, glitzer = false;
     if (variante !== "normal") {
       const folie = { pokeball: "pokeball", meisterball: "masterball" }[variante];
@@ -559,6 +576,7 @@ function fuelleAndereKarten() {
   $("n-akarte").value = anders?.set === sid ? anders.id : "";
 }
 function andereKarteWeg() { anders = null; fuelleKarten(); zeigeBesitz(); markiereKandidat(); }
+$("n-wert").addEventListener("input", () => zeigeBesitz());
 $("n-asuche-text").addEventListener("input", () => { if (anders) andereKarteWeg(); else fuelleAndereSets(); });
 $("n-asuche-text").addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });
 $("n-aset").addEventListener("change", () => { setVonHand = $("n-aset").value || null; if (anders) andereKarteWeg(); else fuelleAndereKarten(); });
@@ -610,12 +628,15 @@ function zeigeBesitz() {
   };
   feld.hidden = false;
   const variantenText = VARIANTE_KURZ[va] ? `<div>Variante: <strong>${VARIANTE[va]}</strong></div>` : "";
-  if (!hat.length) { huelle("fehlt", `<strong class="gross-text">Fehlt dir noch!</strong>${variantenText}<div>Marktwert ca. ${eur(g.preis)}</div>`); return; }
+  const wertText = g.preis === null && !betrag($("n-wert").value)
+    ? `<div>Marktwert: <strong>noch kein verlässlicher Preis</strong> – trag unten bei „Eigener Wert“ eine Schätzung ein.</div>`
+    : `<div>Marktwert ca. ${eur(betrag($("n-wert").value) ?? g.preis)}${betrag($("n-wert").value) != null ? " (deine Schätzung)" : ""}</div>`;
+  if (!hat.length) { huelle("fehlt", `<strong class="gross-text">Fehlt dir noch!</strong>${variantenText}${wertText}`); return; }
   const teile = hat.map(e => `${e.anzahl}× ${SPRACHE[e.sprache] || e.sprache}${e.auflage === "1. Auflage" ? " (1. Auflage)" : ""}${VARIANTE_KURZ[e.variante] ? " " + VARIANTE[e.variante] : ""}`);
   const genau = hat.some(e => e.sprache === sp && e.auflage === au && (e.variante || "normal") === va);
   huelle("hat", `<strong class="gross-text">Hast du schon</strong>${variantenText}<div>${teile.join(", ")}.` +
     (genau ? " Diese wäre ein weiteres Exemplar." : ` Die Variante ${SPRACHE[sp] || sp}${au === "1. Auflage" ? ", 1. Auflage" : ""}${VARIANTE_KURZ[va] ? ", " + VARIANTE[va] : ""} hast du noch nicht.`) +
-    `</div>${VARIANTE_KURZ[va] ? `<div>Marktwert ca. ${eur(g.preis)}</div>` : ""}`);
+    `</div>${VARIANTE_KURZ[va] || g.preis === null || betrag($("n-wert").value) != null ? wertText : ""}`);
 }
 function setzeModus(m) {
   modus = m;
@@ -876,6 +897,9 @@ $("form-neu").addEventListener("submit", async ev => {
                 ...(VARIANTE_KURZ[variante] ? { variante } : {}),
                 ...(B.setkarten[g.set] && !VARIANTE_KURZ[variante] ? {} : { preis: g.preis ?? null }) };
   }
+  // eigener Wert (z. B. wenn es noch keinen verlässlichen Marktpreis gibt): gilt als fester Preis, die Automatik überschreibt ihn nicht
+  const eigenerWert = betrag($("n-wert").value);
+  if (eigenerWert != null && eintrag.id_karte) Object.assign(eintrag, { preis: eigenerWert, preis_fest: true });
   // Preis noch nicht da (zweite Quelle antwortet langsam): kurz darauf warten statt ohne Preis zu speichern
   if ("preis" in eintrag && eintrag.preis == null && eintrag.id_karte) {
     meldung.textContent = "Hole den Marktwert …";
