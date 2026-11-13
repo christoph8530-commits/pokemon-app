@@ -209,6 +209,13 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
 .hilfe .marken { display: grid; grid-template-columns: 2.2em 1fr; gap: 4px 8px; font-size: 0.92rem; }
 .hilfe .marken b { font-family: var(--mono); text-align: center; border: 1.5px solid var(--ink); border-radius: 4px; height: 1.5em; line-height: 1.4em; }
 .hilfe .merksatz { padding: 8px 10px; border-left: 4px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; }
+.glitzer-frage { display: grid; gap: 8px; padding: 10px 12px; border: 2px solid var(--accent); border-radius: 12px; }
+.glitzer-frage.ok { border-color: var(--line); }
+.glitzer-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.glitzer-knoepfe button { font: inherit; font-weight: 700; display: grid; gap: 2px; padding: 10px 8px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; text-align: center; }
+.glitzer-knoepfe button small { font-weight: 400; color: var(--muted); }
+.glitzer-knoepfe button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--bg)); }
+.glitzer-knoepfe button.tipp:not([aria-pressed="true"]) { border-style: dashed; border-color: var(--accent); }
 .willkommen { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 </style>
 </head>
@@ -303,6 +310,7 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     <div class="nummer-zeile"><label>Nummer auf der Karte <span class="hinweis">(optional, gern mit Name oder Set-Kürzel)</span><input id="n-nummer" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="z. B. 046/086, MEE 007 oder 036/86 Psiau"></label><button type="button" class="knopf" id="n-nummer-suchen">Mit Nummer suchen</button></div>
     <div class="kandidaten" id="n-kandidaten" hidden></div>
     <div class="besitz" id="n-besitz" hidden></div>
+    <div class="glitzer-frage" id="n-glitzer" hidden><strong>Was glitzert an der Karte?</strong><div class="glitzer-knoepfe"><button type="button" data-glitzer="normal" aria-pressed="false">Nichts oder nur das Bild<small>Standard</small></button><button type="button" data-glitzer="reverse" aria-pressed="false">Alles außer dem Bild<small>Reverse Holo</small></button></div><span class="muted" id="n-glitzer-hinweis"></span></div>
     <div class="stempel" id="n-stempel" hidden></div>
     <button type="button" class="knopf" id="n-korrigieren" hidden style="justify-self:start">Falsch erkannt? Korrigieren</button>
     <div class="formular" id="n-formular">

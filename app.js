@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.42 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.43 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -137,6 +137,10 @@ async function variantenVon(id) {
         : v.type === "reverse" ? "reverse" : "normal") : null).catch(() => null);
   }
   return VARIANTEN_CACHE[id];
+}
+function variantenBekannt(id, danach) {   // Ergebnis synchron (undefined = noch nicht geladen); lädt im Hintergrund nach
+  if (!(id in VARIANTEN_CACHE)) variantenVon(id).then(v => { VARIANTEN_CACHE[id].wert = v; danach?.(); });
+  return VARIANTEN_CACHE[id].wert;
 }
 async function pruefeVariante(id) {
   const va = $("n-variante").value;
@@ -621,8 +625,51 @@ function gewaehlt() {
   if (VARIANTE_KURZ[variante]) g.preis = variantenPreis(g.id, variante) ?? null;
   return g;
 }
+// Reverse Holo erkennt Gemini auf Fotos oft nicht (der Glanz wirkt nur wie ein dunklerer Hintergrund) –
+// deshalb fragt die App bei neueren Karten nach und speichert erst nach einer Antwort.
+// Wizards-Sets (bis 2001) haben keine Reverse Holos, Sonderkarten über der Setgröße auch nicht.
+let glitzerFuer = null, glitzerOk = false;
+function brauchtGlitzerFrage(g) {
+  if (!g?.id || modus === "pruefen") return false;
+  const k = IDX?.karte(g.id), s = k && IDX.sets[k.set];
+  if (!s || SETREIHE.includes(k.set) || ["Base", "Gym", "Neo"].includes(s.serie)) return false;
+  const nr = parseInt(k.nr, 10);
+  if (!(nr > 0) || (s.offiziell && nr > s.offiziell)) return false;
+  if (/\b(ex|EX|GX|V|VMAX|VSTAR)$/.test(k.en)) return false;   // ex-, GX- und V-Karten glitzern immer, Reverse gibt es nicht
+  const vs = variantenBekannt(g.id, () => { if (glitzerFuer === g.id) zeigeGlitzerFrage(gewaehlt()); });   // bekannt und ohne Reverse → nicht fragen
+  return !(vs && !vs.includes("reverse"));
+}
+// gibt true zurück, wenn die Variante wegen eines Kartenwechsels zurückgesetzt wurde (dann neu anzeigen)
+function zeigeGlitzerFrage(g) {
+  const frage = $("n-glitzer");
+  const tipp = erkennung?.antwort && erkennung.tipp?.[0] === g?.id ? (VARIANTE_VON_GEMINI[erkennung.antwort.glitzer] === "reverse" ? "reverse" : "normal") : null;
+  if (g?.id !== glitzerFuer) {
+    glitzerFuer = g?.id || null; glitzerOk = false;
+    // andere Karte: Reverse/Standard der vorigen Karte nicht übernehmen (Pokéball-/Meisterball-Muster bleiben)
+    const neu = tipp || "normal";
+    if (["normal", "reverse"].includes($("n-variante").value) && $("n-variante").value !== neu) { $("n-variante").value = neu; return true; }
+  }
+  frage.hidden = !brauchtGlitzerFrage(g);
+  if (frage.hidden) return false;
+  const va = $("n-variante").value;
+  frage.classList.toggle("ok", glitzerOk);
+  frage.querySelectorAll("[data-glitzer]").forEach(b => {
+    b.setAttribute("aria-pressed", String(glitzerOk && b.dataset.glitzer === (va === "reverse" ? "reverse" : "normal")));
+    b.classList.toggle("tipp", !glitzerOk && b.dataset.glitzer === tipp);
+  });
+  const eigene = inventar().filter(e => e.id === g.id), hatNormal = eigene.some(e => (e.variante || "normal") === "normal") && !eigene.some(e => e.variante === "reverse");
+  $("n-glitzer-hinweis").textContent = glitzerOk ? "" : [tipp ? `Gemini tippt auf ${tipp === "reverse" ? "Reverse Holo" : "Standard"} (gestrichelt) – bitte selbst kurz hinschauen.` : "",
+    hatNormal ? "Diese Karte hast du schon als Standard – ist diese vielleicht das Reverse Holo?" : ""].filter(Boolean).join(" ");
+  return false;
+}
+$("n-glitzer").addEventListener("click", e => {
+  const b = e.target.closest("[data-glitzer]"); if (!b) return;
+  $("n-variante").value = b.dataset.glitzer; glitzerOk = true;
+  zeigeBesitz(); markiereKandidat();
+});
 function zeigeBesitz() {
   const feld = $("n-besitz"), g = gewaehlt();
+  if (zeigeGlitzerFrage(g)) return zeigeBesitz();
   if (!g) { feld.hidden = true; return; }
   const sp = $("n-sprache").value, au = $("n-auflage").value, va = g.variante;
   const hat = inventar().filter(e => (e.set === g.set && String(e.nr) === String(g.nr)) || gleicherPlatz(e, g));
@@ -660,6 +707,7 @@ $("n-set").addEventListener("change", () => {
   setVonHand = set && set !== "anderes" ? set : null;
   anders = set === "anderes" ? anders : null; fuelleKarten(); zeigeBesitz(); markiereKandidat();
 });
+$("n-variante").addEventListener("change", () => { glitzerOk = true; });
 ["n-karte", "n-sprache", "n-auflage", "n-variante"].forEach(id => $(id).addEventListener("change", () => { zeigeBesitz(); markiereKandidat(); zeigeStempel(); }));
 $("n-sprache").addEventListener("change", () => {   // andere Sprache: Kartennamen im Dialog anpassen
   if ($("n-set").value === "anderes") fuelleKarten();
@@ -674,7 +722,7 @@ function oeffneNeu(vor = {}) {
   const m = vor.modus || "neu";
   if (m === "neu" && !schreibbar) { toast("Zum Speichern bitte zuerst GitHub in den Einstellungen einrichten."); return; }
   fuelleSets();
-  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null; setVonHand = null; speicherId = null;
+  $("form-neu").reset(); neuFoto = null; anders = null; erkennung = null; setVonHand = null; speicherId = null; glitzerFuer = vor.id || null; glitzerOk = !!vor.variante;
   $("n-vorschau").innerHTML = `<div class="leerbild"></div>`;
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.";
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
@@ -888,6 +936,11 @@ $("form-neu").addEventListener("submit", async ev => {
   const meldung = $("n-speichern-meldung"), knopf = $("n-speichern");
   const sprache = $("n-sprache").value, auflage = $("n-auflage").value, variante = $("n-variante").value;
   let eintrag;
+  if (!$("n-glitzer").hidden && !glitzerOk) {
+    meldung.textContent = "Bitte oben kurz antippen: Was glitzert an der Karte?";
+    $("n-glitzer").scrollIntoView({ block: "center" });
+    return;
+  }
   if ($("n-set").value !== "anderes" && !gewaehlt()) {
     meldung.textContent = "Noch keine Karte gewählt: Foto machen und erkennen lassen, die Nummer eintippen oder Set und Karte auswählen.";
     return;
