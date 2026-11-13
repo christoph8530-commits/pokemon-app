@@ -440,6 +440,23 @@ dialog::backdrop { background: rgb(8 10 16 / 0.7); }
     </div>
   </div>
 </dialog>
+<dialog id="dlg-bearbeiten" aria-labelledby="b-titel">
+  <form class="dlg" id="form-bearbeiten" method="dialog">
+    <div class="dlg-kopf"><h2 id="b-titel">Eintrag bearbeiten</h2><button type="button" class="zu" data-zu>Schließen</button></div>
+    <div class="besitz" id="b-karte"></div>
+    <div class="formular">
+      <label>Variante<select id="b-variante"></select></label>
+      <label>Sprache<select id="b-sprache"></select></label>
+      <label>Auflage<select id="b-auflage"></select></label>
+      <label>Anzahl<input id="b-anzahl" type="number" min="1" max="99" inputmode="numeric"></label>
+      <label>Bezahlt (€, gesamt)<input id="b-bezahlt" type="text" inputmode="decimal" placeholder="optional"></label>
+      <label>Eigener Wert (€ pro Karte)<input id="b-wert" type="text" inputmode="decimal" placeholder="leer = Marktwert"></label>
+      <label class="breit">Notiz<input id="b-notiz" type="text" placeholder="optional"></label>
+    </div>
+    <p class="muted" style="margin:0">Ist es eine ganz andere Karte, den Eintrag im Verlauf löschen und neu scannen.</p>
+    <div class="dlg-fuss"><span class="meldung" id="b-meldung"></span><button type="submit" class="knopf voll" id="b-speichern">Änderungen speichern</button></div>
+  </form>
+</dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>

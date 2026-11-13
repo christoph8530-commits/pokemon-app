@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.41 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.42 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -448,7 +448,7 @@ function verlauf() {
     ${bildHtml(x.art === "zugang" && x.foto ? fotoUrl(x.foto) || setBild(x.set, x.nr, x.id_karte) : setBild(x.set, x.nr, x.id_karte))}
     <span class="name">${x.art === "zugang" ? "＋" : "−"} ${esc(kartenName({ id: x.id_karte, sprache: x.sprache, name: x.name }).titel)} ${Number(x.anzahl) > 1 ? `×${x.anzahl}` : ""}
       <span class="unter">${esc(setName(x.set))} ${x.nummer ? "· " + esc(x.nummer) : ""} · ${esc(x.sprache || "")} · ${datumText(x.datum)} · ${esc(x.art === "zugang" ? x.herkunft : x.plattform)}${x.notiz ? " · " + esc(x.notiz) : ""}</span></span>
-    <span class="rechts">${x.art === "zugang" ? (x.bezahlt != null ? eur(x.bezahlt) : "") : eur(x.preis)}${schreibbar ? `<button type="button" class="knopf gefahr" data-loeschen="${x.art}|${x.id}">Löschen</button>` : ""}</span></li>`).join("")
+    <span class="rechts">${x.art === "zugang" ? (x.bezahlt != null ? eur(x.bezahlt) : "") : eur(x.preis)}${schreibbar && x.art === "zugang" ? `<button type="button" class="knopf" data-bearbeiten="${x.id}">Bearbeiten</button>` : ""}${schreibbar ? `<button type="button" class="knopf gefahr" data-loeschen="${x.art}|${x.id}">Löschen</button>` : ""}</span></li>`).join("")
     : `<li style="display:block;padding:14px"><span class="muted">Noch keine Einträge. Neue Karten erfasst du mit dem Knopf „＋ Karte“ unten rechts, Verkäufe über eine Karte in der Sammlung.</span></li>`;
 }
 
@@ -506,7 +506,8 @@ function zeigeKarte(key) {
       : schutzVon(e) === "huelle" ? `<div><strong>Aufbewahrung:</strong> zuerst in eine Penny-Hülle, dann in den Binder.</div>` : ""}
     <div><a href="${cm(e.name)}" target="_blank" rel="noopener">Auf Cardmarket ansehen</a></div>`;
   $("k-aktionen").innerHTML = `<button type="button" class="knopf" id="k-set">Set „${esc(setName(e.set))}“ ansehen</button>` +
-    (schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "");
+    (schreibbar ? `<button type="button" class="knopf" id="k-mehr">Weiteres Exemplar</button><button type="button" class="knopf voll" id="k-verkauf">Verkauf erfassen</button>` : "") +
+    (schreibbar ? eigeneEintraege(e).map((z, i, l) => `<button type="button" class="knopf" data-bearbeiten="${z.id}">Bearbeiten${l.length > 1 ? ` (${datumText(z.datum)}${z.anzahl > 1 ? ", " + z.anzahl + " Stück" : ""})` : ""}</button>`).join("") : "");
   $("k-set").onclick = () => { $("dlg-karte").close(); setInSammlung(e.set, e.key); };
   if (schreibbar) {
     $("k-mehr").onclick = () => { $("dlg-karte").close(); oeffneNeu({ set: e.set, nr: e.nr, sprache: e.sprache, auflage: e.auflage, variante: e.variante, id: e.id }); };
@@ -525,6 +526,7 @@ document.addEventListener("click", e => {
     $("k-info").innerHTML = `<div class="muted">${esc(x.art)} · ${esc(x.set)}</div><div>${esc(x.beschreibung)}</div><div>ca. ${eur(x.preis)} (${zahl.format(x.tief)} bis ${eur(x.hoch)}, grobe Schätzung)</div>`;
     $("k-aktionen").innerHTML = ""; $("dlg-karte").showModal(); return; }
   const l = e.target.closest("[data-loeschen]"); if (l) frageLoeschen(l.dataset.loeschen);
+  const be = e.target.closest("[data-bearbeiten]"); if (be) { $("dlg-karte").open && $("dlg-karte").close(); oeffneBearbeiten(be.dataset.bearbeiten); }
 });
 
 // ---------- Karte hinzufügen / prüfen ----------
@@ -980,6 +982,59 @@ $("f-ja").addEventListener("click", async () => {
     $("dlg-frage").close(); toast("Gelöscht");
   } catch (e) { $("f-text").textContent = "Löschen hat nicht geklappt. Bitte noch einmal versuchen."; }
   finally { $("f-ja").disabled = false; }
+});
+
+// ---------- Zugang bearbeiten ----------
+// Ändert Variante, Sprache, Auflage, Anzahl, Bezahlt, eigenen Wert und Notiz eines Handy-Eintrags.
+// Karte und Foto bleiben; der Schlüssel (Karte|Sprache|Auflage|Variante) wird neu gebildet, der Preis bei Bedarf neu geholt.
+function eigeneEintraege(e) { return ZUG.filter(z => z.key === e.key).sort((a, b) => (b.erstellt || "").localeCompare(a.erstellt || "")); }
+let bearbeitet = null;
+function oeffneBearbeiten(id) {
+  const z = ZUG.find(x => x.id === id); if (!z) return;
+  bearbeitet = z;
+  $("b-variante").innerHTML = $("n-variante").innerHTML; $("b-sprache").innerHTML = $("n-sprache").innerHTML; $("b-auflage").innerHTML = $("n-auflage").innerHTML;
+  $("b-variante").value = z.variante || "normal"; $("b-sprache").value = z.sprache; $("b-auflage").value = z.auflage || "normal";
+  $("b-anzahl").value = z.anzahl || 1; $("b-bezahlt").value = z.bezahlt != null ? String(z.bezahlt).replace(".", ",") : "";
+  $("b-wert").value = z.preis_fest && z.preis != null ? String(z.preis).replace(".", ",") : ""; $("b-notiz").value = z.notiz || "";
+  $("b-variante").disabled = !z.id_karte;   // frei eingetragene Karten haben keine Varianten
+  $("b-karte").className = "besitz";
+  $("b-karte").innerHTML = `<div class="zeile">${bildHtml(z.foto ? fotoUrl(z.foto) || setBild(z.set, z.nr, z.id_karte) : setBild(z.set, z.nr, z.id_karte))}
+    <div><strong>${esc(kartenName({ id: z.id_karte, sprache: z.sprache, name: z.name }).titel)}</strong><div class="muted">${esc(setName(z.set))} ${z.nummer ? "· " + esc(z.nummer) : ""} · hinzugefügt ${datumText(z.datum)}</div>
+    <div class="muted">Marktwert ${z.preis != null ? eur(z.preis) + (z.preis_fest ? " (deine Schätzung)" : "") : "–"}</div></div></div>`;
+  $("b-meldung").textContent = "";
+  $("dlg-bearbeiten").showModal();
+}
+$("form-bearbeiten").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const z = bearbeitet; if (!z || !schreibbar) return;
+  const variante = z.id_karte ? $("b-variante").value : "normal", sprache = $("b-sprache").value, auflage = $("b-auflage").value;
+  const wert = betrag($("b-wert").value), meldung = $("b-meldung"), knopf = $("b-speichern");
+  const neu = { ...z, sprache, auflage, anzahl: Math.max(1, Math.min(99, parseInt($("b-anzahl").value, 10) || 1)),
+                bezahlt: betrag($("b-bezahlt").value), notiz: $("b-notiz").value.trim() };
+  if (VARIANTE_KURZ[variante]) neu.variante = variante; else delete neu.variante;
+  neu.key = z.id_karte ? schluessel(z.id_karte, sprache, auflage, variante) : `${z.key.split("|")[0]}|${sprache}|${auflage}`;
+  knopf.disabled = true;
+  try {
+    if (wert != null) Object.assign(neu, { preis: wert, preis_fest: true });
+    else {
+      delete neu.preis_fest;
+      const andereKarte = (z.variante || "normal") !== variante || z.preis_fest;
+      if (z.id_karte && andereKarte) {
+        if (B.setkarten[z.set] && !VARIANTE_KURZ[variante]) delete neu.preis;   // Grundsammlung: Preis kommt aus dem Katalog
+        else {
+          meldung.textContent = "Hole den Marktwert …";
+          neu.preis = await Promise.race([livePreis(z.id_karte, variante), new Promise(r => setTimeout(() => r(null), 15000))]);
+        }
+      }
+    }
+    meldung.textContent = "Speichert …";
+    ZUG = await speicher.aendern(PFADE.zugaenge, l => l.map(x => x.id === z.id ? neu : x), `Zugang geändert: ${z.name}`);
+    merkeStand(); alles();
+    $("dlg-bearbeiten").close(); toast(`Geändert: ${z.name}`);
+  } catch (e) {
+    meldung.textContent = e?.code === "zeit" ? "GitHub hat nicht geantwortet. Bitte nochmal auf Speichern tippen."
+      : e?.code === "offline" ? "Keine Internetverbindung – bitte später nochmal speichern." : "Speichern hat nicht geklappt. Bitte noch einmal versuchen.";
+  } finally { knopf.disabled = false; }
 });
 
 // ---------- Einstellungen ----------
