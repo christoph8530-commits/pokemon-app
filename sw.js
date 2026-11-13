@@ -1,7 +1,7 @@
 // Service Worker: hält die App und die Kartenbilder offline bereit.
 // Daten von GitHub und Anfragen an Gemini laufen nie über den Zwischenspeicher.
-const VERSION = "v37";
-const APP = ["./", "index.html", "app.js", "erkennung.js", "speicher.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "daten/karten-index.json"];
+const VERSION = "v38";
+const APP = ["./", "index.html", "app.js", "erkennung.js", "speicher.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable.png", "daten/karten-index.json"];
 
 self.addEventListener("install", e => {
   // cache: "reload" – nicht die bis zu 10 Minuten alte Kopie aus dem Browser-Zwischenspeicher nehmen

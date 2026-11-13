@@ -1,9 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#2a4fa3"/>
-  <rect x="150" y="96" width="232" height="320" rx="22" fill="#f2c230" transform="rotate(10 266 256)"/>
-  <rect x="118" y="104" width="232" height="320" rx="22" fill="#f2c230" stroke="#2a4fa3" stroke-width="10"/>
-  <rect x="142" y="130" width="184" height="130" rx="10" fill="#ffffff"/>
-  <rect x="142" y="282" width="184" height="18" rx="9" fill="#3b2c00" opacity=".55"/>
-  <rect x="142" y="316" width="130" height="18" rx="9" fill="#3b2c00" opacity=".35"/>
-  <circle cx="234" cy="195" r="42" fill="#2a4fa3"/>
+  <!-- Hintergrund in App-Farbe, darauf eine Sammelkarte und ein rot-weißer Fangball -->
+  <defs>
+    <radialGradient id="glanz" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a63c4"/>
+      <stop offset="1" stop-color="#1f3d86"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#hg)"/>
+  <!-- Karte (gelber Rand wie bei den alten Karten), leicht gedreht -->
+  <g transform="rotate(-12 210 230)">
+    <rect x="104" y="92" width="200" height="278" rx="18" fill="#f5c83a" stroke="#1f3d86" stroke-width="8"/>
+    <rect x="124" y="114" width="160" height="112" rx="8" fill="#9fd3f5"/>
+    <path d="M124 196 Q170 168 204 196 T284 190 V226 H124 Z" fill="#6fbf5f"/>
+    <circle cx="246" cy="146" r="16" fill="#fff4b0"/>
+    <rect x="124" y="244" width="160" height="14" rx="7" fill="#7a5a00" opacity=".45"/>
+    <rect x="124" y="270" width="118" height="14" rx="7" fill="#7a5a00" opacity=".3"/>
+    <rect x="124" y="296" width="140" height="14" rx="7" fill="#7a5a00" opacity=".3"/>
+  </g>
+  <!-- Fangball -->
+  <g transform="translate(318 318)">
+    <circle r="118" fill="#1a1a1a"/>
+    <path d="M-106 -6 A106 106 0 0 1 106 -6 Z" fill="#e3242b"/>
+    <path d="M-106 6 A106 106 0 0 0 106 6 Z" fill="#ffffff"/>
+    <rect x="-106" y="-11" width="212" height="22" fill="#1a1a1a"/>
+    <circle r="40" fill="#1a1a1a"/>
+    <circle r="26" fill="#ffffff"/>
+    <circle r="12" fill="#f1f1f1" stroke="#cfcfcf" stroke-width="3"/>
+    <circle r="106" fill="url(#glanz)"/>
+  </g>
 </svg>
