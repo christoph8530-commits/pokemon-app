@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.40 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.41 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -129,7 +129,10 @@ async function ersatzPreis(id, variante) {
 const VARIANTEN_CACHE = {};
 async function variantenVon(id) {
   if (!(id in VARIANTEN_CACHE)) {
+    // Bei ganz neuen Sets hat TCGdex oft nur einen automatisch erzeugten Platzhalter („variantId: generated“,
+    // nur normal) – das heißt „noch unbekannt“, nicht „gibt es nicht“ (Tauros DLR 077 wurde so auf Standard zurückgesetzt)
     VARIANTEN_CACHE[id] = fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).then(r => r.ok ? r.json() : null)
+      .then(d => d?.variants_detailed?.every(v => v.variantId === "generated") ? null : d)
       .then(d => d?.variants_detailed ? d.variants_detailed.map(v => v.foil === "masterball" ? "meisterball" : v.foil === "pokeball" ? "pokeball"
         : v.type === "reverse" ? "reverse" : "normal") : null).catch(() => null);
   }
