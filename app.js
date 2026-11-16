@@ -14,7 +14,7 @@ const betrag = s => { const n = parseFloat(String(s || "").replace(/\s/g, "").re
 const cm = name => `https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=${encodeURIComponent(name)}`;
 const SETREIHE = ["base1", "base2", "base3", "base5", "gym1", "gym2", "neo1", "basep"];
 const TEST = new URLSearchParams(location.search).has("test");
-const VERSION = "1.43 (13.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
+const VERSION = "1.44 (16.11.2026)";      // in den Einstellungen sichtbar – hilft beim Prüfen, ob die neue Fassung geladen ist
 
 const lies = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const merke = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
@@ -71,6 +71,14 @@ function fehlende(inv) {
   for (const set of Object.keys(B.setkarten)) for (const k of B.setkarten[set])
     if (!besitz.has(set + "|" + k.nr)) out.push({ ...k, set, fehlt: true });
   return out;
+}
+// Fehlende Karten eines weiteren Sets (nicht Grundsammlung) aus dem Kartenverzeichnis: alle regulären Nummern 1 … Setgröße
+function fehlendeImSet(set, inv) {
+  const s = IDX?.sets[set];
+  if (!s?.offiziell || B.setkarten[set]) return [];
+  const besitz = besitzMenge(inv);
+  return IDX.karten.filter(k => k.set === set && /^\d+$/.test(k.nr) && Number(k.nr) <= s.offiziell && !besitz.has(`${set}|${Number(k.nr)}`))
+    .map(k => ({ set, nr: Number(k.nr), id: k.id, name: k.de, nummer: `${k.nr}/${String(s.offiziell).padStart(k.nr.length, "0")}`, symbol: "", preis: null, fehlt: true }));
 }
 function setName(set) {
   if (set === "anderes") return "Anderes Set";
@@ -236,11 +244,11 @@ function sammlung(inv, fehlt) {
   for (const id of ["s-sprache", "s-doppelt", "s-fehlend"]) $(id).disabled = binder;   // passen nicht zur Binder-Ansicht
   if (binder) return binderAnsicht(inv, set, suche);
   const doppelt = $("s-doppelt").checked, mitFehl = $("s-fehlend").checked && !doppelt && !sprache
-    && (!set || !!B.setkarten[set]);   // fehlende Karten kennt die App nur für die Sets der Grundsammlung
+    && (!set || !!B.setkarten[set] || !!IDX?.sets[set]?.offiziell);   // weitere Sets: nur wenn genau dieses Set gewählt ist
   const bekannt = new Set(SETREIHE);
   let liste = inv.filter(e => (!set || e.set === set || (set === "anderes" && !bekannt.has(e.set))) && (!sprache || e.sprache === sprache) && (!doppelt || e.anzahl > 1) && trifft(e, suche));
   const eigene = liste.length;
-  if (mitFehl) liste = liste.concat(fehlt.filter(f => (!set || f.set === set) && trifft(f, suche)));
+  if (mitFehl) liste = liste.concat((set && !B.setkarten[set] ? fehlendeImSet(set, inv) : fehlt).filter(f => (!set || f.set === set) && trifft(f, suche)));
   const idx = s => { const i = SETREIHE.indexOf(s); return i < 0 ? 99 : i; };
   const wertVon = e => e.fehlt ? (e.preis || 0) : e.summe;
   const nrZahl = e => typeof e.nr === "number" ? e.nr : parseInt(e.nr, 10) || 0;
@@ -253,10 +261,10 @@ function sammlung(inv, fehlt) {
   liste.sort(sortierer[sort]);
   $("s-treffer").textContent = `${eigene} Sorten` + (mitFehl ? ` · ${liste.length - eigene} fehlen` : "");
   $("s-raster").innerHTML = liste.length ? liste.map(e => e.fehlt ? `
-    <button type="button" class="karte fehlt" data-fehlt="${e.set}|${e.nr}">
-      <span class="bild">${bildHtml(setBild(e.set, e.nr))}</span><span class="marke">Fehlt</span>
-      <span class="info"><span class="k-titel">${esc(e.name)}</span><span class="meta">${esc(setName(e.set))} · <span class="mono">${e.nummer}</span> ${e.symbol}</span>
-      ${e.holo ? `<span class="chips"><span class="chip gelb">Holo</span></span>` : ""}<span class="preis">ca. ${eur(e.preis)}</span></span>
+    <button type="button" class="karte fehlt" data-fehlt="${e.set}|${e.nr}|${e.id || ""}">
+      <span class="bild">${bildHtml(setBild(e.set, e.nr, e.id))}</span><span class="marke">Fehlt</span>
+      <span class="info"><span class="k-titel">${esc(e.name)}</span><span class="meta">${esc(setName(e.set))} · <span class="mono">${e.nummer}</span> ${e.symbol || ""}</span>
+      ${e.holo ? `<span class="chips"><span class="chip gelb">Holo</span></span>` : ""}${e.preis != null ? `<span class="preis">ca. ${eur(e.preis)}</span>` : ""}</span>
     </button>` : `
     <button type="button" class="karte" data-key="${esc(e.key)}">
       <span class="bild">${bildHtml(bildVon(e), e.name)}</span>
@@ -522,7 +530,7 @@ function zeigeKarte(key) {
 document.addEventListener("click", e => {
   const k = e.target.closest("[data-key]"); if (k && !e.target.closest("a")) { zeigeKarte(k.dataset.key); return; }
   const f = e.target.closest("[data-fehlt]");
-  if (f) { const [set, nr] = f.dataset.fehlt.split("|"); if (schreibbar) oeffneNeu({ set, nr: Number(nr), herkunft: "Gekauft" }); return; }
+  if (f) { const [set, nr, id] = f.dataset.fehlt.split("|"); if (schreibbar) oeffneNeu({ set, nr: Number(nr), id: id || undefined, herkunft: "Gekauft" }); return; }
   const kauf = e.target.closest("[data-kaufen]");
   if (kauf) { const [set, nr] = kauf.dataset.kaufen.split("|"); oeffneNeu({ set, nr: Number(nr), herkunft: "Gekauft" }); return; }
   const s = e.target.closest("[data-sonstige]");
@@ -614,7 +622,7 @@ function gewaehlt() {
   if (set === "anderes") {
     if (!anders) return null;
     const nr = /^\d+$/.test(anders.nr) ? Number(anders.nr) : anders.nr;
-    g = { set: anders.set, nr, name: anders.de, nummer: nummerVon(anders), id: anders.id, preis: anders.preis ?? null, bild: anders.bild && anders.bild + "/low.jpg" };
+    g = { set: anders.set, nr, name: anders.de, nummer: nummerVon(anders), id: anders.id, preis: anders.preis, bild: anders.bild && anders.bild + "/low.jpg" };   // undefined = lädt noch
   } else {
     if (!set || !$("n-karte").value) return null;
     const nr = Number($("n-karte").value), sk = setInfo(set, nr);
@@ -727,7 +735,10 @@ function oeffneNeu(vor = {}) {
   $("n-meldung").className = "meldung"; $("n-meldung").textContent = "Mach ein Foto der Vorderseite. Die Nummer unten rechts sollte lesbar sein.";
   $("n-speichern-meldung").textContent = ""; $("n-erkennen").hidden = true; $("n-nurbild").hidden = true;
   $("n-kandidaten").hidden = true; $("n-stempel").hidden = true; $("n-nummer").value = "";
-  if (vor.set && !B.setkarten[vor.set] && vor.id && IDX?.karte(vor.id)) { anders = { ...IDX.karte(vor.id) }; $("n-set").value = "anderes"; }
+  if (vor.set && !B.setkarten[vor.set] && vor.id && IDX?.karte(vor.id)) {
+    anders = { ...IDX.karte(vor.id), preis: undefined }; $("n-set").value = "anderes";
+    const id = vor.id; livePreis(id).then(p => { if (anders?.id === id) { anders.preis = p; zeigeBesitz(); } });   // Marktwert nachladen
+  }
   else $("n-set").value = vor.set && B.setkarten[vor.set] ? vor.set : "";
   fuelleKarten(vor.nr);
   $("n-sprache").value = vor.sprache || "DE"; $("n-auflage").value = vor.auflage || "normal"; $("n-variante").value = vor.variante || "normal";
